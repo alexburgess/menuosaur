@@ -2,7 +2,7 @@
 
 Menuosaur is a WordPress plugin for building frontend menu shortcodes from a cached Square catalog.
 
-It reads Square categories, items, item variations, prices, descriptions, custom attributes, and item images. WordPress admins can build named menu shortcodes, choose one or more Square categories, drag items and variations into the desired order, and control which parts of each item render on the page.
+It reads Square regular categories, items, item variations, prices, descriptions, custom attributes, and selected menu item images. WordPress admins can build named menu shortcodes, choose regular categories, search for individual products, drag selected items into the desired order, and control which parts of each item render on the page.
 
 ## Features
 
@@ -12,8 +12,8 @@ It reads Square categories, items, item variations, prices, descriptions, custom
 - Queued WordPress Media Library image caching for Square images.
 - Per-menu image source choices: original Square URL, WordPress thumbnail, WordPress medium, or WordPress large.
 - Multi-category menu shortcodes.
-- Category picker filter for Square menu, regular, and kitchen categories.
-- Drag-and-drop item and variation ordering in the admin builder.
+- Regular-category browsing plus direct product search for adding individual items.
+- Drag-and-drop selected item ordering in the admin builder.
 - Global option to display cheaper variations first.
 - Global option to remove currency symbols from rendered prices.
 - Configurable WordPress admin sidebar menu label.
@@ -36,7 +36,7 @@ It reads Square categories, items, item variations, prices, descriptions, custom
 3. Select one or more Square categories.
 4. Choose whether to show the category heading.
 5. Select the items to include.
-6. Select and order the variations for each item.
+6. Select the variations for each item.
 7. Configure the displayed content.
 8. Save the shortcode.
 

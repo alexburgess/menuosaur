@@ -379,13 +379,30 @@ class Menuosaur_Plugin {
     }
 
     private function render_shortcode_builder($shortcode) {
-        $categories = $this->manager->get_categories();
-        $items = $this->manager->get_all_items();
+        $categories = $this->filter_regular_categories($this->manager->get_categories());
+        $regular_category_lookup = array();
+        foreach ($categories as $category) {
+            $regular_category_lookup[(string) $category['object_id']] = true;
+        }
+
+        $all_items = $this->manager->get_all_items();
         $variations_by_item = array();
         $item_lookup = array();
         $variation_lookup = array();
+        $config = $shortcode['config'];
+        $display = isset($config['display']) && is_array($config['display']) ? $config['display'] : $this->manager->default_shortcode_config()['display'];
+        $image_size = $this->sanitize_image_size(isset($display['image_size']) ? $display['image_size'] : 'square_original');
+        $selected_items = isset($config['item_order']) ? $config['item_order'] : array();
+        $selected_item_lookup = array_fill_keys($selected_items, true);
+        $items = array();
 
-        foreach ($items as $item) {
+        foreach ($all_items as $item) {
+            $item_id = (string) $item['object_id'];
+            if (!isset($selected_item_lookup[$item_id]) && !$this->item_belongs_to_category_lookup($item, $regular_category_lookup)) {
+                continue;
+            }
+
+            $items[] = $item;
             $item_id = (string) $item['object_id'];
             $item_lookup[$item_id] = $item;
             $variations_by_item[$item_id] = $this->manager->get_variations_by_item($item_id);
@@ -394,12 +411,14 @@ class Menuosaur_Plugin {
             }
         }
 
-        $config = $shortcode['config'];
-        $display = isset($config['display']) && is_array($config['display']) ? $config['display'] : $this->manager->default_shortcode_config()['display'];
-        $image_size = $this->sanitize_image_size(isset($display['image_size']) ? $display['image_size'] : 'square_original');
-        $selected_items = isset($config['item_order']) ? $config['item_order'] : array();
-        $selected_item_lookup = array_fill_keys($selected_items, true);
-        $selected_category_ids = $this->get_shortcode_category_ids($shortcode);
+        $selected_category_ids = array_values(
+            array_filter(
+                $this->get_shortcode_category_ids($shortcode),
+                function ($category_id) use ($regular_category_lookup) {
+                    return isset($regular_category_lookup[(string) $category_id]);
+                }
+            )
+        );
         $item_positions = array();
         $position = 1;
         foreach ($selected_items as $item_id) {
@@ -407,7 +426,6 @@ class Menuosaur_Plugin {
             $position++;
         }
         $custom_attribute_options = $this->get_available_custom_attribute_options();
-        $category_type_filter_options = $this->get_category_type_filter_options($categories);
         $selected_attribute_keys = isset($display['custom_attribute_keys']) && is_array($display['custom_attribute_keys']) ? $display['custom_attribute_keys'] : array();
         foreach ($selected_attribute_keys as $selected_attribute_key) {
             if (!isset($custom_attribute_options[$selected_attribute_key])) {
@@ -476,21 +494,13 @@ class Menuosaur_Plugin {
         echo '<hr />';
 
         echo '<div class="menuosaur-builder-options">';
-        echo '<label for="menuosaur_category_ids"><strong>' . esc_html__('Square categories', 'menuosaur') . '</strong></label>';
-        if (count($category_type_filter_options) > 1) {
-            echo '<div class="menuosaur-category-type-filter" role="radiogroup" aria-label="' . esc_attr__('Category type filter', 'menuosaur') . '">';
-            foreach ($category_type_filter_options as $filter_value => $filter_label) {
-                echo '<label><input type="radio" name="menuosaur_category_type_filter" value="' . esc_attr($filter_value) . '"' . checked($filter_value, 'all', false) . ' /> <span>' . esc_html($filter_label) . '</span></label>';
-            }
-            echo '</div>';
-        }
+        echo '<label for="menuosaur_category_ids"><strong>' . esc_html__('Regular Square categories', 'menuosaur') . '</strong></label>';
         echo '<select name="category_ids[]" id="menuosaur_category_ids" class="menuosaur-category-select" multiple size="8">';
         foreach ($categories as $category) {
-            $category_type = $this->normalize_category_type_filter_value(isset($category['category_type']) ? $category['category_type'] : '');
-            echo '<option value="' . esc_attr($category['object_id']) . '" data-category-type="' . esc_attr($category_type) . '"' . selected(in_array($category['object_id'], $selected_category_ids, true), true, false) . '>' . esc_html($this->get_category_display_label($category)) . '</option>';
+            echo '<option value="' . esc_attr($category['object_id']) . '"' . selected(in_array($category['object_id'], $selected_category_ids, true), true, false) . '>' . esc_html($this->get_category_display_label($category)) . '</option>';
         }
         echo '</select>';
-        echo '<p class="description menuosaur-category-help">' . esc_html__('Select one or more categories. Items from all selected categories can be included in this shortcode.', 'menuosaur') . '</p>';
+        echo '<p class="description menuosaur-category-help">' . esc_html__('Only Square regular categories are shown. Select categories to browse their items, or use search below to add products individually.', 'menuosaur') . '</p>';
 
         echo '<label class="menuosaur-checkbox-label"><input type="checkbox" name="show_category_heading" value="1" ' . checked($shortcode['show_category_heading'], true, false) . ' /> ' . esc_html__('Show category as a heading', 'menuosaur') . '</label>';
         echo '<label class="menuosaur-checkbox-label"><input type="checkbox" name="show_variation_labels" value="1" ' . checked($shortcode['show_variation_labels'], true, false) . ' /> ' . esc_html__('Show variation labels before prices', 'menuosaur') . '</label>';
@@ -531,65 +541,99 @@ class Menuosaur_Plugin {
 
         $this->render_builder_warnings($shortcode, $item_lookup, $variation_lookup);
 
-        echo '<div class="menuosaur-item-picker" data-empty-label="' . esc_attr__('No cached items match this category yet. Sync the Square catalog or choose another category.', 'menuosaur') . '">';
-        echo '<p class="menuosaur-picker-placeholder">' . esc_html__('Choose a category to show matching items.', 'menuosaur') . '</p>';
-        echo '<p class="menuosaur-picker-empty" hidden>' . esc_html__('No cached items match this category yet. Sync the Square catalog or choose another category.', 'menuosaur') . '</p>';
+        echo '<div class="menuosaur-builder-browser">';
+        echo '<div class="menuosaur-selected-panel">';
+        echo '<div class="menuosaur-panel-head">';
+        echo '<h3>' . esc_html__('Selected items', 'menuosaur') . '</h3>';
+        echo '<p class="description">' . esc_html__('Drag selected items to set the public menu order.', 'menuosaur') . '</p>';
+        echo '</div>';
+        echo '<p class="menuosaur-selected-empty" hidden>' . esc_html__('No items selected yet.', 'menuosaur') . '</p>';
+        echo '<div class="menuosaur-selected-items">';
 
         foreach ($items as $item) {
             $item_id = (string) $item['object_id'];
             $is_selected = isset($selected_item_lookup[$item_id]);
-            $category_ids_json = wp_json_encode(isset($item['category_ids']) ? $item['category_ids'] : array());
-            $item_order = isset($item_positions[$item_id]) ? (int) $item_positions[$item_id] : 100;
-
-            echo '<div class="menuosaur-item-card" data-category-ids="' . esc_attr($category_ids_json) . '" data-item-id="' . esc_attr($item_id) . '" draggable="true">';
-            echo '<div class="menuosaur-item-card-head">';
-            echo '<button type="button" class="menuosaur-drag-handle" aria-label="' . esc_attr__('Drag to reorder item', 'menuosaur') . '"><i class="fa-duotone fa-grip-dots-vertical" aria-hidden="true"></i></button>';
-            echo '<label class="menuosaur-item-check"><input type="checkbox" name="selected_items[]" value="' . esc_attr($item_id) . '" ' . checked($is_selected, true, false) . ' /> <span>' . esc_html($item['name']) . '</span></label>';
-            echo '<input type="hidden" class="menuosaur-item-order-input" name="item_order[' . esc_attr($item_id) . ']" value="' . esc_attr((string) $item_order) . '" />';
-            echo '</div>';
-
-            if (!empty($item['description'])) {
-                echo '<p class="menuosaur-item-description-preview">' . esc_html(wp_strip_all_tags($item['description'])) . '</p>';
+            if (!$is_selected) {
+                continue;
             }
 
-            echo '<div class="menuosaur-variation-list">';
-            $variations = isset($variations_by_item[$item_id]) ? $variations_by_item[$item_id] : array();
-            if (empty($variations)) {
-                echo '<p class="description">' . esc_html__('No active variations are cached for this item.', 'menuosaur') . '</p>';
-            }
-
-            $selected_variations = isset($config['variations'][$item_id]) && is_array($config['variations'][$item_id]) ? $config['variations'][$item_id] : array();
-            $selected_variation_lookup = array_fill_keys($selected_variations, true);
-            $variation_positions = array();
-            $variation_position = 1;
-            foreach ($selected_variations as $variation_id) {
-                $variation_positions[$variation_id] = $variation_position;
-                $variation_position++;
-            }
-            $this->sort_variations_for_builder($variations, $variation_positions);
-
-            foreach ($variations as $variation) {
-                $variation_id = (string) $variation['object_id'];
-                $variation_order = isset($variation_positions[$variation_id]) ? (int) $variation_positions[$variation_id] : 100;
-                $price = $this->format_square_money($variation['price_amount'], $variation['currency']);
-                $variation_label = trim($variation['name'] . ($price !== '' ? ' - ' . wp_strip_all_tags($price) : ''));
-
-                echo '<div class="menuosaur-variation-row" draggable="true">';
-                echo '<button type="button" class="menuosaur-drag-handle" aria-label="' . esc_attr__('Drag to reorder variation', 'menuosaur') . '"><i class="fa-duotone fa-grip-dots-vertical" aria-hidden="true"></i></button>';
-                echo '<label><input type="checkbox" name="selected_variations[' . esc_attr($item_id) . '][]" value="' . esc_attr($variation_id) . '" ' . checked(isset($selected_variation_lookup[$variation_id]), true, false) . ' /> ' . esc_html($variation_label) . '</label>';
-                echo '<input type="hidden" class="menuosaur-variation-order-input" name="variation_order[' . esc_attr($variation_id) . ']" value="' . esc_attr((string) $variation_order) . '" />';
-                echo '</div>';
-            }
-            echo '</div>';
-            echo '</div>';
+            $this->render_builder_item_card($item, isset($variations_by_item[$item_id]) ? $variations_by_item[$item_id] : array(), $config, true, isset($item_positions[$item_id]) ? (int) $item_positions[$item_id] : 100);
         }
 
+        echo '</div>';
+        echo '</div>';
+
+        echo '<div class="menuosaur-available-panel">';
+        echo '<div class="menuosaur-panel-head">';
+        echo '<h3>' . esc_html__('Add items', 'menuosaur') . '</h3>';
+        echo '<label for="menuosaur_item_search" class="screen-reader-text">' . esc_html__('Search items', 'menuosaur') . '</label>';
+        echo '<input type="search" id="menuosaur_item_search" class="regular-text menuosaur-item-search" placeholder="' . esc_attr__('Search product names...', 'menuosaur') . '" autocomplete="off" />';
+        echo '</div>';
+        echo '<p class="menuosaur-picker-placeholder">' . esc_html__('Choose a regular category or search by product name.', 'menuosaur') . '</p>';
+        echo '<p class="menuosaur-picker-empty" hidden>' . esc_html__('No cached items match this category or search.', 'menuosaur') . '</p>';
+        echo '<div class="menuosaur-available-items">';
+
+        foreach ($items as $item) {
+            $item_id = (string) $item['object_id'];
+            if (isset($selected_item_lookup[$item_id])) {
+                continue;
+            }
+
+            $this->render_builder_item_card($item, isset($variations_by_item[$item_id]) ? $variations_by_item[$item_id] : array(), $config, false, 100);
+        }
+
+        echo '</div>';
+        echo '</div>';
         echo '</div>';
 
         echo '<p class="submit">';
         echo '<button type="submit" class="button button-primary"><i class="fa-duotone fa-floppy-disk" aria-hidden="true"></i> ' . esc_html__('Save Shortcode', 'menuosaur') . '</button>';
         echo '</p>';
         echo '</form>';
+        echo '</div>';
+    }
+
+    private function render_builder_item_card($item, $variations, $config, $is_selected, $item_order) {
+        $item_id = (string) $item['object_id'];
+        $category_ids = isset($item['category_ids']) && is_array($item['category_ids']) ? $item['category_ids'] : array();
+        $category_ids_json = wp_json_encode($category_ids);
+        $has_saved_variations = isset($config['variations'][$item_id]) && is_array($config['variations'][$item_id]);
+        $selected_variations = $has_saved_variations ? $config['variations'][$item_id] : array();
+        $selected_variation_lookup = array_fill_keys($selected_variations, true);
+        $search_parts = array($item['name']);
+        foreach ($variations as $variation) {
+            $search_parts[] = isset($variation['name']) ? (string) $variation['name'] : '';
+        }
+
+        $classes = 'menuosaur-item-card' . ($is_selected ? ' is-selected' : '');
+        echo '<div class="' . esc_attr($classes) . '" data-category-ids="' . esc_attr($category_ids_json) . '" data-item-id="' . esc_attr($item_id) . '" data-search="' . esc_attr(strtolower(wp_strip_all_tags(implode(' ', $search_parts)))) . '"' . ($is_selected ? ' draggable="true"' : '') . '>';
+        echo '<div class="menuosaur-item-card-head">';
+        echo '<button type="button" class="menuosaur-drag-handle" aria-label="' . esc_attr__('Drag to reorder item', 'menuosaur') . '"><i class="fa-duotone fa-grip-dots-vertical" aria-hidden="true"></i></button>';
+        echo '<input type="checkbox" class="menuosaur-selected-item-input" name="selected_items[]" value="' . esc_attr($item_id) . '" ' . checked($is_selected, true, false) . ' />';
+        echo '<strong class="menuosaur-item-title">' . esc_html($item['name']) . '</strong>';
+        echo '<div class="menuosaur-variation-list">';
+        if (empty($variations)) {
+            echo '<span class="menuosaur-variation-empty">' . esc_html__('No active variations', 'menuosaur') . '</span>';
+        } else {
+            $variation_order = 1;
+            foreach ($variations as $variation) {
+                $variation_id = (string) $variation['object_id'];
+                $price = $this->format_square_money($variation['price_amount'], $variation['currency']);
+                $variation_label = trim($variation['name'] . ($price !== '' ? ' - ' . wp_strip_all_tags($price) : ''));
+                $variation_checked = $is_selected
+                    ? (!$has_saved_variations || isset($selected_variation_lookup[$variation_id]))
+                    : true;
+
+                echo '<label class="menuosaur-variation-chip"><input type="checkbox" name="selected_variations[' . esc_attr($item_id) . '][]" value="' . esc_attr($variation_id) . '" ' . checked($variation_checked, true, false) . disabled(!$is_selected, true, false) . ' /> ' . esc_html($variation_label) . '</label>';
+                echo '<input type="hidden" class="menuosaur-variation-order-input" name="variation_order[' . esc_attr($variation_id) . ']" value="' . esc_attr((string) $variation_order) . '" ' . disabled(!$is_selected, true, false) . ' />';
+                $variation_order++;
+            }
+        }
+        echo '</div>';
+        echo '<input type="hidden" class="menuosaur-item-order-input" name="item_order[' . esc_attr($item_id) . ']" value="' . esc_attr((string) $item_order) . '" ' . disabled(!$is_selected, true, false) . ' />';
+        echo '<button type="button" class="button button-small menuosaur-add-item">' . esc_html__('Add', 'menuosaur') . '</button>';
+        echo '<button type="button" class="button button-small menuosaur-remove-item">' . esc_html__('Remove', 'menuosaur') . '</button>';
+        echo '</div>';
         echo '</div>';
     }
 
@@ -1793,6 +1837,10 @@ class Menuosaur_Plugin {
             return $existing_id;
         }
 
+        $cache = get_option('menuosaur_image_cache', array());
+        $cache = is_array($cache) ? $cache : array();
+        $stale_attachment_id = !empty($cache[$cache_key]['attachment_id']) ? absint($cache[$cache_key]['attachment_id']) : 0;
+
         $this->load_media_dependencies();
 
         $tmp = download_url($source_url, 45);
@@ -1820,8 +1868,6 @@ class Menuosaur_Plugin {
         update_post_meta($attachment_id, '_menuosaur_square_image_source_url', $source_url);
         update_post_meta($attachment_id, '_menuosaur_square_image_version', (int) $version);
 
-        $cache = get_option('menuosaur_image_cache', array());
-        $cache = is_array($cache) ? $cache : array();
         $cache[$cache_key] = array(
             'attachment_id' => (int) $attachment_id,
             'source_url' => $source_url,
@@ -1829,6 +1875,10 @@ class Menuosaur_Plugin {
             'cached_at' => $this->manager->now_gmt(),
         );
         update_option('menuosaur_image_cache', $cache, false);
+
+        if ($stale_attachment_id > 0 && $stale_attachment_id !== (int) $attachment_id && get_post($stale_attachment_id)) {
+            wp_delete_attachment($stale_attachment_id, true);
+        }
 
         return (int) $attachment_id;
     }
@@ -2042,8 +2092,30 @@ class Menuosaur_Plugin {
     }
 
     private function build_shortcode_config_from_request($category_ids) {
-        $category_ids = is_array($category_ids) ? array_values(array_filter(array_map('sanitize_text_field', $category_ids))) : array();
-        $category_items = $this->manager->get_items_by_categories($category_ids);
+        $regular_categories = $this->filter_regular_categories($this->manager->get_categories());
+        $regular_category_lookup = array();
+        foreach ($regular_categories as $category) {
+            $regular_category_lookup[(string) $category['object_id']] = true;
+        }
+
+        $category_ids = is_array($category_ids)
+            ? array_values(
+                array_filter(
+                    array_map('sanitize_text_field', $category_ids),
+                    function ($category_id) use ($regular_category_lookup) {
+                        return isset($regular_category_lookup[(string) $category_id]);
+                    }
+                )
+            )
+            : array();
+        $category_items = array_values(
+            array_filter(
+                $this->manager->get_all_items(),
+                function ($item) use ($regular_category_lookup) {
+                    return $this->item_belongs_to_category_lookup($item, $regular_category_lookup);
+                }
+            )
+        );
         $item_lookup = array();
         foreach ($category_items as $item) {
             $item_lookup[(string) $item['object_id']] = $item;
@@ -2234,56 +2306,37 @@ class Menuosaur_Plugin {
 
     private function get_category_display_label($category) {
         $label = isset($category['name']) ? (string) $category['name'] : '';
-        if (!empty($category['category_type'])) {
+        $category_type = !empty($category['category_type']) ? strtoupper((string) $category['category_type']) : '';
+        if ($category_type !== '' && $category_type !== 'REGULAR_CATEGORY') {
             $label .= ' (' . $category['category_type'] . ')';
         }
 
         return $label;
     }
 
-    private function get_category_type_filter_options($categories) {
-        $counts = array();
-        foreach ($categories as $category) {
-            $type = $this->normalize_category_type_filter_value(isset($category['category_type']) ? $category['category_type'] : '');
-            if ($type === '') {
-                continue;
-            }
-
-            if (!isset($counts[$type])) {
-                $counts[$type] = 0;
-            }
-            $counts[$type]++;
-        }
-
-        $options = array(
-            'all' => sprintf(__('All categories (%d)', 'menuosaur'), count($categories)),
+    private function filter_regular_categories($categories) {
+        return array_values(
+            array_filter(
+                is_array($categories) ? $categories : array(),
+                function ($category) {
+                    return isset($category['category_type']) && strtoupper((string) $category['category_type']) === 'REGULAR_CATEGORY';
+                }
+            )
         );
-        $preferred_labels = array(
-            'menu_category' => __('Menu categories', 'menuosaur'),
-            'regular_category' => __('Regular categories', 'menuosaur'),
-            'kitchen_category' => __('Kitchen categories', 'menuosaur'),
-        );
-
-        foreach ($preferred_labels as $type => $label) {
-            if (isset($counts[$type])) {
-                $options[$type] = sprintf('%s (%d)', $label, $counts[$type]);
-                unset($counts[$type]);
-            }
-        }
-
-        foreach ($counts as $type => $count) {
-            $options[$type] = sprintf('%s (%d)', $this->humanize_category_type($type), $count);
-        }
-
-        return $options;
     }
 
-    private function normalize_category_type_filter_value($category_type) {
-        return sanitize_key(strtolower((string) $category_type));
-    }
+    private function item_belongs_to_category_lookup($item, $category_lookup) {
+        if (empty($category_lookup) || empty($item['category_ids']) || !is_array($item['category_ids'])) {
+            return false;
+        }
 
-    private function humanize_category_type($category_type) {
-        return ucwords(str_replace(array('-', '_'), ' ', (string) $category_type));
+        foreach ($item['category_ids'] as $category_id) {
+            if (isset($category_lookup[(string) $category_id])) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private function format_square_money($amount, $currency) {

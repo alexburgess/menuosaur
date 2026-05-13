@@ -16,14 +16,19 @@
     }
 
     var categorySelect = form.querySelector('.menuosaur-category-select');
-    var categoryTypeFilters = Array.prototype.slice.call(form.querySelectorAll('input[name="menuosaur_category_type_filter"]'));
-    var picker = form.querySelector('.menuosaur-item-picker');
+    var selectedList = form.querySelector('.menuosaur-selected-items');
+    var availableList = form.querySelector('.menuosaur-available-items');
+    var searchInput = form.querySelector('.menuosaur-item-search');
     var placeholder = form.querySelector('.menuosaur-picker-placeholder');
     var empty = form.querySelector('.menuosaur-picker-empty');
-    var cards = Array.prototype.slice.call(form.querySelectorAll('.menuosaur-item-card'));
+    var selectedEmpty = form.querySelector('.menuosaur-selected-empty');
 
-    if (!categorySelect || !picker) {
+    if (!categorySelect || !selectedList || !availableList) {
       return;
+    }
+
+    function getCards() {
+      return Array.prototype.slice.call(form.querySelectorAll('.menuosaur-item-card'));
     }
 
     function getSelectedCategoryIds() {
@@ -34,52 +39,110 @@
         .filter(Boolean);
     }
 
-    function getSelectedCategoryTypeFilter() {
-      var selected = categoryTypeFilters.filter(function (input) {
-        return input.checked;
-      })[0];
-
-      return selected ? selected.value : 'all';
+    function getSearchQuery() {
+      return searchInput ? searchInput.value.trim().toLowerCase() : '';
     }
 
-    function syncCategoryTypeFilter() {
-      if (!categoryTypeFilters.length) {
-        return;
+    function isSelected(card) {
+      var input = card.querySelector('.menuosaur-selected-item-input');
+      return !!(input && input.checked);
+    }
+
+    function setCardInputs(card, selected) {
+      var selectedInput = card.querySelector('.menuosaur-selected-item-input');
+      var orderInput = card.querySelector('.menuosaur-item-order-input');
+      var variationInputs = card.querySelectorAll('.menuosaur-variation-list input');
+
+      if (selectedInput) {
+        selectedInput.checked = selected;
+        selectedInput.disabled = !selected;
       }
 
-      var selectedType = getSelectedCategoryTypeFilter();
-      Array.prototype.slice.call(categorySelect.options || []).forEach(function (option) {
-        var optionType = option.getAttribute('data-category-type') || '';
-        var visible = selectedType === 'all' || optionType === selectedType || option.selected;
-        option.hidden = !visible;
-        option.disabled = !visible && !option.selected;
+      if (orderInput) {
+        orderInput.disabled = !selected;
+      }
+
+      variationInputs.forEach(function (input) {
+        input.disabled = !selected;
       });
+
+      card.classList.toggle('is-selected', selected);
+      if (selected) {
+        card.setAttribute('draggable', 'true');
+      } else {
+        card.removeAttribute('draggable');
+      }
     }
 
-    function setInputsDisabled(card, disabled) {
-      card.querySelectorAll('input, select, textarea, button').forEach(function (input) {
-        input.disabled = disabled;
-      });
-    }
-
-    function updateOrder(container, selector, inputSelector) {
+    function updateSelectedOrder() {
       var order = 1;
-      Array.prototype.slice.call(container.querySelectorAll(selector)).forEach(function (item) {
-        if (item.hidden) {
-          return;
-        }
-
-        var input = item.querySelector(inputSelector);
-        if (input && !input.disabled) {
+      Array.prototype.slice.call(selectedList.querySelectorAll('.menuosaur-item-card')).forEach(function (card) {
+        var input = card.querySelector('.menuosaur-item-order-input');
+        if (input) {
           input.value = String(order);
         }
         order += 1;
       });
     }
 
-    function getDragAfterElement(container, selector, y) {
+    function syncSelectedEmpty() {
+      if (selectedEmpty) {
+        selectedEmpty.hidden = selectedList.querySelectorAll('.menuosaur-item-card').length > 0;
+      }
+    }
+
+    function moveCard(card, selected) {
+      setCardInputs(card, selected);
+      if (selected) {
+        selectedList.appendChild(card);
+      } else {
+        availableList.appendChild(card);
+      }
+      updateSelectedOrder();
+      syncSelectedEmpty();
+      syncVisibleItems();
+    }
+
+    function syncVisibleItems() {
+      var selectedCategoryIds = getSelectedCategoryIds();
+      var query = getSearchQuery();
+      var visibleCount = 0;
+
+      getCards().forEach(function (card) {
+        if (isSelected(card)) {
+          card.hidden = false;
+          return;
+        }
+
+        var categoryIds = parseCategoryIds(card);
+        var searchTarget = (card.getAttribute('data-search') || '').toLowerCase();
+        var matchesSearch = query !== '' && searchTarget.indexOf(query) !== -1;
+        var matchesCategory =
+          query === '' &&
+          selectedCategoryIds.length > 0 &&
+          selectedCategoryIds.some(function (categoryId) {
+            return categoryIds.indexOf(categoryId) !== -1;
+          });
+        var visible = matchesSearch || matchesCategory;
+
+        card.hidden = !visible;
+        if (visible) {
+          visibleCount += 1;
+        }
+      });
+
+      if (placeholder) {
+        placeholder.hidden = query !== '' || selectedCategoryIds.length > 0;
+      }
+
+      if (empty) {
+        empty.hidden = (query === '' && selectedCategoryIds.length === 0) || visibleCount > 0;
+      }
+    }
+
+    function getDragAfterElement(container, y) {
       var draggableElements = Array.prototype.slice
-        .call(container.querySelectorAll(selector + ':not(.is-dragging)'))
+        .call(container.querySelectorAll('.menuosaur-item-card:not(.is-dragging)'))
         .filter(function (element) {
           return !element.hidden;
         });
@@ -99,118 +162,75 @@
       ).element;
     }
 
-    function initSortable(container, selector, inputSelector) {
-      if (!container) {
-        return;
-      }
-
+    function initSelectedSortable() {
       var dragged = null;
-      container.querySelectorAll(selector).forEach(function (item) {
-        item.addEventListener('dragstart', function (event) {
-          dragged = item;
-          item.classList.add('is-dragging');
-          if (event.dataTransfer) {
-            event.dataTransfer.effectAllowed = 'move';
-            event.dataTransfer.setData('text/plain', item.getAttribute('data-item-id') || 'menuosaur-sortable');
-          }
-        });
 
-        item.addEventListener('dragend', function () {
-          item.classList.remove('is-dragging');
-          dragged = null;
-          updateOrder(container, selector, inputSelector);
-        });
+      selectedList.addEventListener('dragstart', function (event) {
+        var card = event.target.closest('.menuosaur-item-card');
+        if (!card || !isSelected(card)) {
+          return;
+        }
+
+        dragged = card;
+        card.classList.add('is-dragging');
+        if (event.dataTransfer) {
+          event.dataTransfer.effectAllowed = 'move';
+          event.dataTransfer.setData('text/plain', card.getAttribute('data-item-id') || 'menuosaur-item');
+        }
       });
 
-      container.addEventListener('dragover', function (event) {
+      selectedList.addEventListener('dragend', function () {
+        if (dragged) {
+          dragged.classList.remove('is-dragging');
+        }
+        dragged = null;
+        updateSelectedOrder();
+      });
+
+      selectedList.addEventListener('dragover', function (event) {
         if (!dragged) {
           return;
         }
 
         event.preventDefault();
-        var afterElement = getDragAfterElement(container, selector, event.clientY);
+        var afterElement = getDragAfterElement(selectedList, event.clientY);
         if (!afterElement) {
-          container.appendChild(dragged);
+          selectedList.appendChild(dragged);
         } else {
-          container.insertBefore(dragged, afterElement);
+          selectedList.insertBefore(dragged, afterElement);
         }
-        updateOrder(container, selector, inputSelector);
+        updateSelectedOrder();
       });
-
-      updateOrder(container, selector, inputSelector);
     }
 
-    function syncCardSelection(card) {
-      var itemCheckbox = card.querySelector('.menuosaur-item-check input[type="checkbox"]');
-      var itemSelected = !!(itemCheckbox && itemCheckbox.checked && !itemCheckbox.disabled);
-      var variationInputs = card.querySelectorAll('.menuosaur-variation-list input');
+    form.addEventListener('click', function (event) {
+      var addButton = event.target.closest('.menuosaur-add-item');
+      var removeButton = event.target.closest('.menuosaur-remove-item');
 
-      card.classList.toggle('is-selected', itemSelected);
-      variationInputs.forEach(function (input) {
-        input.disabled = !itemSelected;
-      });
-      updateOrder(card.querySelector('.menuosaur-variation-list') || card, '.menuosaur-variation-row', '.menuosaur-variation-order-input');
-    }
-
-    function syncVisibleItems() {
-      var selectedCategoryIds = getSelectedCategoryIds();
-      var visibleCount = 0;
-
-      cards.forEach(function (card) {
-        var categoryIds = parseCategoryIds(card);
-        var visible =
-          selectedCategoryIds.length > 0 &&
-          selectedCategoryIds.some(function (categoryId) {
-            return categoryIds.indexOf(categoryId) !== -1;
-          });
-
-        card.hidden = !visible;
-        setInputsDisabled(card, !visible);
-
-        if (visible) {
-          visibleCount += 1;
-          syncCardSelection(card);
-        }
-      });
-
-      if (placeholder) {
-        placeholder.hidden = selectedCategoryIds.length > 0;
+      if (addButton) {
+        moveCard(addButton.closest('.menuosaur-item-card'), true);
       }
 
-      if (empty) {
-        empty.hidden = selectedCategoryIds.length === 0 || visibleCount > 0;
-      }
-
-      updateOrder(picker, '.menuosaur-item-card', '.menuosaur-item-order-input');
-    }
-
-    cards.forEach(function (card) {
-      var itemCheckbox = card.querySelector('.menuosaur-item-check input[type="checkbox"]');
-      if (itemCheckbox) {
-        itemCheckbox.addEventListener('change', function () {
-          syncCardSelection(card);
-        });
+      if (removeButton) {
+        moveCard(removeButton.closest('.menuosaur-item-card'), false);
       }
     });
 
     categorySelect.addEventListener('change', syncVisibleItems);
-    categoryTypeFilters.forEach(function (input) {
-      input.addEventListener('change', function () {
-        syncCategoryTypeFilter();
-        syncVisibleItems();
-      });
-    });
-    initSortable(picker, '.menuosaur-item-card', '.menuosaur-item-order-input');
-    form.querySelectorAll('.menuosaur-variation-list').forEach(function (list) {
-      initSortable(list, '.menuosaur-variation-row', '.menuosaur-variation-order-input');
-    });
+    if (searchInput) {
+      searchInput.addEventListener('input', syncVisibleItems);
+    }
+
     form.addEventListener('submit', function () {
-      updateOrder(picker, '.menuosaur-item-card', '.menuosaur-item-order-input');
-      form.querySelectorAll('.menuosaur-variation-list').forEach(function (list) {
-        updateOrder(list, '.menuosaur-variation-row', '.menuosaur-variation-order-input');
-      });
+      updateSelectedOrder();
     });
-    syncCategoryTypeFilter();
+
+    getCards().forEach(function (card) {
+      setCardInputs(card, isSelected(card));
+    });
+    initSelectedSortable();
+    updateSelectedOrder();
+    syncSelectedEmpty();
     syncVisibleItems();
   }
 
