@@ -16,6 +16,7 @@
     }
 
     var categorySelect = form.querySelector('.menuosaur-category-select');
+    var categoryTypeFilters = Array.prototype.slice.call(form.querySelectorAll('input[name="menuosaur_category_type_filter"]'));
     var picker = form.querySelector('.menuosaur-item-picker');
     var placeholder = form.querySelector('.menuosaur-picker-placeholder');
     var empty = form.querySelector('.menuosaur-picker-empty');
@@ -31,6 +32,28 @@
           return option.value;
         })
         .filter(Boolean);
+    }
+
+    function getSelectedCategoryTypeFilter() {
+      var selected = categoryTypeFilters.filter(function (input) {
+        return input.checked;
+      })[0];
+
+      return selected ? selected.value : 'all';
+    }
+
+    function syncCategoryTypeFilter() {
+      if (!categoryTypeFilters.length) {
+        return;
+      }
+
+      var selectedType = getSelectedCategoryTypeFilter();
+      Array.prototype.slice.call(categorySelect.options || []).forEach(function (option) {
+        var optionType = option.getAttribute('data-category-type') || '';
+        var visible = selectedType === 'all' || optionType === selectedType || option.selected;
+        option.hidden = !visible;
+        option.disabled = !visible && !option.selected;
+      });
     }
 
     function setInputsDisabled(card, disabled) {
@@ -171,6 +194,12 @@
     });
 
     categorySelect.addEventListener('change', syncVisibleItems);
+    categoryTypeFilters.forEach(function (input) {
+      input.addEventListener('change', function () {
+        syncCategoryTypeFilter();
+        syncVisibleItems();
+      });
+    });
     initSortable(picker, '.menuosaur-item-card', '.menuosaur-item-order-input');
     form.querySelectorAll('.menuosaur-variation-list').forEach(function (list) {
       initSortable(list, '.menuosaur-variation-row', '.menuosaur-variation-order-input');
@@ -181,6 +210,7 @@
         updateOrder(list, '.menuosaur-variation-row', '.menuosaur-variation-order-input');
       });
     });
+    syncCategoryTypeFilter();
     syncVisibleItems();
   }
 

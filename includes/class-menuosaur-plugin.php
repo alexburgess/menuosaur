@@ -407,6 +407,7 @@ class Menuosaur_Plugin {
             $position++;
         }
         $custom_attribute_options = $this->get_available_custom_attribute_options();
+        $category_type_filter_options = $this->get_category_type_filter_options($categories);
         $selected_attribute_keys = isset($display['custom_attribute_keys']) && is_array($display['custom_attribute_keys']) ? $display['custom_attribute_keys'] : array();
         foreach ($selected_attribute_keys as $selected_attribute_key) {
             if (!isset($custom_attribute_options[$selected_attribute_key])) {
@@ -476,9 +477,17 @@ class Menuosaur_Plugin {
 
         echo '<div class="menuosaur-builder-options">';
         echo '<label for="menuosaur_category_ids"><strong>' . esc_html__('Square categories', 'menuosaur') . '</strong></label>';
+        if (count($category_type_filter_options) > 1) {
+            echo '<div class="menuosaur-category-type-filter" role="radiogroup" aria-label="' . esc_attr__('Category type filter', 'menuosaur') . '">';
+            foreach ($category_type_filter_options as $filter_value => $filter_label) {
+                echo '<label><input type="radio" name="menuosaur_category_type_filter" value="' . esc_attr($filter_value) . '"' . checked($filter_value, 'all', false) . ' /> <span>' . esc_html($filter_label) . '</span></label>';
+            }
+            echo '</div>';
+        }
         echo '<select name="category_ids[]" id="menuosaur_category_ids" class="menuosaur-category-select" multiple size="8">';
         foreach ($categories as $category) {
-            echo '<option value="' . esc_attr($category['object_id']) . '"' . selected(in_array($category['object_id'], $selected_category_ids, true), true, false) . '>' . esc_html($this->get_category_display_label($category)) . '</option>';
+            $category_type = $this->normalize_category_type_filter_value(isset($category['category_type']) ? $category['category_type'] : '');
+            echo '<option value="' . esc_attr($category['object_id']) . '" data-category-type="' . esc_attr($category_type) . '"' . selected(in_array($category['object_id'], $selected_category_ids, true), true, false) . '>' . esc_html($this->get_category_display_label($category)) . '</option>';
         }
         echo '</select>';
         echo '<p class="description menuosaur-category-help">' . esc_html__('Select one or more categories. Items from all selected categories can be included in this shortcode.', 'menuosaur') . '</p>';
@@ -2102,6 +2111,51 @@ class Menuosaur_Plugin {
         }
 
         return $label;
+    }
+
+    private function get_category_type_filter_options($categories) {
+        $counts = array();
+        foreach ($categories as $category) {
+            $type = $this->normalize_category_type_filter_value(isset($category['category_type']) ? $category['category_type'] : '');
+            if ($type === '') {
+                continue;
+            }
+
+            if (!isset($counts[$type])) {
+                $counts[$type] = 0;
+            }
+            $counts[$type]++;
+        }
+
+        $options = array(
+            'all' => sprintf(__('All categories (%d)', 'menuosaur'), count($categories)),
+        );
+        $preferred_labels = array(
+            'menu_category' => __('Menu categories', 'menuosaur'),
+            'regular_category' => __('Regular categories', 'menuosaur'),
+            'kitchen_category' => __('Kitchen categories', 'menuosaur'),
+        );
+
+        foreach ($preferred_labels as $type => $label) {
+            if (isset($counts[$type])) {
+                $options[$type] = sprintf('%s (%d)', $label, $counts[$type]);
+                unset($counts[$type]);
+            }
+        }
+
+        foreach ($counts as $type => $count) {
+            $options[$type] = sprintf('%s (%d)', $this->humanize_category_type($type), $count);
+        }
+
+        return $options;
+    }
+
+    private function normalize_category_type_filter_value($category_type) {
+        return sanitize_key(strtolower((string) $category_type));
+    }
+
+    private function humanize_category_type($category_type) {
+        return ucwords(str_replace(array('-', '_'), ' ', (string) $category_type));
     }
 
     private function format_square_money($amount, $currency) {

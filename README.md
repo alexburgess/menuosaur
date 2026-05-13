@@ -12,6 +12,7 @@ It reads Square categories, items, item variations, prices, descriptions, custom
 - Queued WordPress Media Library image caching for Square images.
 - Per-menu image source choices: original Square URL, WordPress thumbnail, WordPress medium, or WordPress large.
 - Multi-category menu shortcodes.
+- Category picker filter for Square menu, regular, and kitchen categories.
 - Drag-and-drop item and variation ordering in the admin builder.
 - Global option to display cheaper variations first.
 - Global option to remove currency symbols from rendered prices.
