@@ -298,6 +298,7 @@ class Menuosaur_Plugin {
 
         if ($edit_id && $shortcode) {
             $this->render_shortcode_builder($shortcode);
+            return;
         } elseif ($edit_id) {
             echo '<div class="notice notice-error inline"><p>' . esc_html__('That shortcode could not be found.', 'menuosaur') . '</p></div>';
         }
@@ -370,7 +371,10 @@ class Menuosaur_Plugin {
             echo '<td>' . esc_html(number_format_i18n(count($config['item_order']))) . '</td>';
             echo '<td>' . $this->get_status_pill($shortcode['status'] === 'active') . '</td>';
             echo '<td>' . esc_html($this->format_admin_datetime($shortcode['updated_at'])) . '</td>';
-            echo '<td><a class="button button-small" href="' . esc_url($edit_url) . '">' . esc_html__('Edit', 'menuosaur') . '</a></td>';
+            echo '<td class="menuosaur-actions">';
+            echo '<a class="button button-small" href="' . esc_url($edit_url) . '">' . esc_html__('Edit', 'menuosaur') . '</a> ';
+            echo '<button type="button" class="button button-small menuosaur-copy-button" data-menuosaur-copy="' . esc_attr('[menuosaur id="' . $shortcode['slug'] . '"]') . '"><i class="fa-duotone fa-copy" aria-hidden="true"></i> <span>' . esc_html__('Copy shortcode', 'menuosaur') . '</span></button>';
+            echo '</td>';
             echo '</tr>';
         }
 
@@ -392,6 +396,7 @@ class Menuosaur_Plugin {
         $config = $shortcode['config'];
         $display = isset($config['display']) && is_array($config['display']) ? $config['display'] : $this->manager->default_shortcode_config()['display'];
         $image_size = $this->sanitize_image_size(isset($display['image_size']) ? $display['image_size'] : 'square_original');
+        $heading_text = isset($config['heading_text']) ? trim((string) $config['heading_text']) : '';
         $selected_items = isset($config['item_order']) ? $config['item_order'] : array();
         $selected_item_lookup = array_fill_keys($selected_items, true);
         $items = array();
@@ -502,7 +507,15 @@ class Menuosaur_Plugin {
         echo '</select>';
         echo '<p class="description menuosaur-category-help">' . esc_html__('Only Square regular categories are shown. Select categories to browse their items, or use search below to add products individually.', 'menuosaur') . '</p>';
 
-        echo '<label class="menuosaur-checkbox-label"><input type="checkbox" name="show_category_heading" value="1" ' . checked($shortcode['show_category_heading'], true, false) . ' /> ' . esc_html__('Show category as a heading', 'menuosaur') . '</label>';
+        $has_multiple_categories = count($selected_category_ids) > 1;
+        echo '<div class="menuosaur-heading-options">';
+        echo '<label class="menuosaur-checkbox-label menuosaur-heading-checkbox-row"' . ($has_multiple_categories ? ' hidden' : '') . '><input type="checkbox" name="show_category_heading" value="1" ' . checked($shortcode['show_category_heading'], true, false) . ' /> ' . esc_html__('Show category as a heading', 'menuosaur') . '</label>';
+        echo '<div class="menuosaur-heading-custom-row"' . (!$has_multiple_categories ? ' hidden' : '') . '>';
+        echo '<label for="menuosaur_heading_text"><strong>' . esc_html__('Menu heading', 'menuosaur') . '</strong></label>';
+        echo '<input type="text" name="heading_text" id="menuosaur_heading_text" class="regular-text" value="' . esc_attr($heading_text) . '" placeholder="' . esc_attr__('Sparkling, White & Rosé, December Release...', 'menuosaur') . '" />';
+        echo '<p class="description">' . esc_html__('Used when this shortcode includes multiple categories. Leave blank to render no heading.', 'menuosaur') . '</p>';
+        echo '</div>';
+        echo '</div>';
         echo '<label class="menuosaur-checkbox-label"><input type="checkbox" name="show_variation_labels" value="1" ' . checked($shortcode['show_variation_labels'], true, false) . ' /> ' . esc_html__('Show variation labels before prices', 'menuosaur') . '</label>';
         echo '</div>';
 
@@ -846,6 +859,9 @@ class Menuosaur_Plugin {
         $category_ids = $this->sanitize_category_ids_from_request();
         $category_id = !empty($category_ids) ? $category_ids[0] : '';
         $config = $this->build_shortcode_config_from_request($category_ids);
+        $show_category_heading = count($category_ids) > 1
+            ? trim((string) $config['heading_text']) !== ''
+            : isset($_POST['show_category_heading']);
         $this->ensure_shortcode_image_objects($config);
 
         $result = $this->manager->update_shortcode(
@@ -854,21 +870,14 @@ class Menuosaur_Plugin {
                 'name' => isset($_POST['name']) ? wp_unslash($_POST['name']) : '',
                 'slug' => isset($_POST['slug']) ? wp_unslash($_POST['slug']) : '',
                 'category_id' => $category_id,
-                'show_category_heading' => isset($_POST['show_category_heading']),
+                'show_category_heading' => $show_category_heading,
                 'show_variation_labels' => isset($_POST['show_variation_labels']),
                 'status' => isset($_POST['status']) ? sanitize_key(wp_unslash($_POST['status'])) : 'active',
                 'config' => $config,
             )
         );
 
-        $url = add_query_arg(
-            array(
-                'page' => 'menuosaur-menus',
-                'tab' => 'menus',
-                'shortcode_id' => $shortcode_id,
-            ),
-            admin_url('admin.php')
-        );
+        $url = $this->admin_tab_url('menus');
 
         if (!is_wp_error($result)) {
             $this->queue_shortcode_config_images($config);
@@ -980,12 +989,22 @@ class Menuosaur_Plugin {
 
         $selected_category_ids = $this->get_shortcode_category_ids($shortcode);
         $category = count($selected_category_ids) === 1 ? $this->manager->get_catalog_object($selected_category_ids[0]) : null;
+        $heading_text = isset($config['heading_text']) ? trim((string) $config['heading_text']) : '';
         $parts = array();
 
         $parts[] = '<div class="menuosaur-menu" data-menuosaur-id="' . esc_attr($shortcode['slug']) . '">';
 
-        if ($shortcode['show_category_heading'] && $category && empty($category['is_deleted']) && empty($category['is_archived'])) {
-            $parts[] = '<h4 class="menuosaur-category-heading">' . esc_html($category['name']) . '</h4>';
+        if ($shortcode['show_category_heading']) {
+            $category_heading = '';
+            if ($category && empty($category['is_deleted']) && empty($category['is_archived'])) {
+                $category_heading = (string) $category['name'];
+            } elseif (count($selected_category_ids) > 1 && $heading_text !== '') {
+                $category_heading = $heading_text;
+            }
+
+            if ($category_heading !== '') {
+                $parts[] = '<h4 class="menuosaur-category-heading">' . esc_html($category_heading) . '</h4>';
+            }
         }
 
         foreach ($config['item_order'] as $item_id) {
@@ -2152,6 +2171,7 @@ class Menuosaur_Plugin {
         $config = array(
             'item_order' => $selected_items,
             'variations' => array(),
+            'heading_text' => isset($_POST['heading_text']) ? trim(sanitize_text_field(wp_unslash($_POST['heading_text']))) : '',
             'display' => array(
                 'show_item_name' => isset($_POST['display_show_item_name']) ? 1 : 0,
                 'show_item_image' => isset($_POST['display_show_item_image']) ? 1 : 0,

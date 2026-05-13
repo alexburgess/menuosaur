@@ -14,6 +14,8 @@ It reads Square regular categories, items, item variations, prices, descriptions
 - Multi-category menu shortcodes.
 - Regular-category browsing plus direct product search for adding individual items.
 - Drag-and-drop selected item ordering in the admin builder.
+- Custom heading text for menus that include multiple categories.
+- Copy buttons for saved shortcode actions.
 - Global option to display cheaper variations first.
 - Global option to remove currency symbols from rendered prices.
 - Configurable WordPress admin sidebar menu label.
@@ -34,7 +36,7 @@ It reads Square regular categories, items, item variations, prices, descriptions
 1. Go to **Menuosaur > Menus**.
 2. Create a shortcode and give it a name.
 3. Select one or more Square categories.
-4. Choose whether to show the category heading.
+4. Choose whether to show the category heading, or add custom heading text for multi-category menus.
 5. Select the items to include.
 6. Select the variations for each item.
 7. Configure the displayed content.

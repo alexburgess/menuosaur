@@ -530,6 +530,7 @@ class Menuosaur_Manager {
         return array(
             'item_order' => array(),
             'variations' => array(),
+            'heading_text' => '',
             'display' => array(
                 'show_item_name' => 1,
                 'show_item_image' => 0,
@@ -573,6 +574,10 @@ class Menuosaur_Manager {
                     )
                 );
             }
+        }
+
+        if (isset($config['heading_text'])) {
+            $normalized['heading_text'] = trim(sanitize_text_field((string) $config['heading_text']));
         }
 
         if (isset($config['display']) && is_array($config['display'])) {

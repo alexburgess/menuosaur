@@ -223,6 +223,23 @@
   margin: -8px 0 0;
 }
 
+.menuosaur-heading-options {
+  flex-basis: 100%;
+}
+
+.menuosaur-heading-custom-row {
+  max-width: 520px;
+}
+
+.menuosaur-heading-custom-row label {
+  display: block;
+  margin-bottom: 6px;
+}
+
+.menuosaur-heading-custom-row input {
+  width: 100%;
+}
+
 .menuosaur-checkbox-label {
   align-items: center;
   display: inline-flex;
@@ -388,6 +405,14 @@
 
 .menuosaur-copy-field {
   width: min(360px, 100%);
+}
+
+.menuosaur-actions {
+  white-space: nowrap;
+}
+
+.menuosaur-copy-button i {
+  margin-right: 4px;
 }
 
 .menuosaur-about-credit {

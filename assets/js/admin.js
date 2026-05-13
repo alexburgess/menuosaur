@@ -22,6 +22,8 @@
     var placeholder = form.querySelector('.menuosaur-picker-placeholder');
     var empty = form.querySelector('.menuosaur-picker-empty');
     var selectedEmpty = form.querySelector('.menuosaur-selected-empty');
+    var headingCheckboxRow = form.querySelector('.menuosaur-heading-checkbox-row');
+    var headingCustomRow = form.querySelector('.menuosaur-heading-custom-row');
 
     if (!categorySelect || !selectedList || !availableList) {
       return;
@@ -140,6 +142,16 @@
       }
     }
 
+    function syncHeadingOptions() {
+      var hasMultipleCategories = getSelectedCategoryIds().length > 1;
+      if (headingCheckboxRow) {
+        headingCheckboxRow.hidden = hasMultipleCategories;
+      }
+      if (headingCustomRow) {
+        headingCustomRow.hidden = !hasMultipleCategories;
+      }
+    }
+
     function getDragAfterElement(container, y) {
       var draggableElements = Array.prototype.slice
         .call(container.querySelectorAll('.menuosaur-item-card:not(.is-dragging)'))
@@ -216,7 +228,10 @@
       }
     });
 
-    categorySelect.addEventListener('change', syncVisibleItems);
+    categorySelect.addEventListener('change', function () {
+      syncVisibleItems();
+      syncHeadingOptions();
+    });
     if (searchInput) {
       searchInput.addEventListener('input', syncVisibleItems);
     }
@@ -232,6 +247,66 @@
     updateSelectedOrder();
     syncSelectedEmpty();
     syncVisibleItems();
+    syncHeadingOptions();
+  }
+
+  function fallbackCopyText(text) {
+    var textarea = document.createElement('textarea');
+    textarea.value = text;
+    textarea.setAttribute('readonly', 'readonly');
+    textarea.style.position = 'fixed';
+    textarea.style.top = '-9999px';
+    document.body.appendChild(textarea);
+    textarea.select();
+
+    try {
+      document.execCommand('copy');
+    } catch (error) {
+      // Older browser fallback; the selected textarea still gives the user something to copy.
+    }
+
+    document.body.removeChild(textarea);
+  }
+
+  function markCopied(button) {
+    var label = button.querySelector('span') || button;
+    var original = button.getAttribute('data-original-label');
+    if (!original) {
+      original = label.textContent;
+      button.setAttribute('data-original-label', original);
+    }
+
+    label.textContent = 'Copied';
+    window.setTimeout(function () {
+      label.textContent = original;
+    }, 1400);
+  }
+
+  function initCopyButtons() {
+    document.querySelectorAll('.menuosaur-copy-button').forEach(function (button) {
+      button.addEventListener('click', function () {
+        var text = button.getAttribute('data-menuosaur-copy') || '';
+        if (!text) {
+          return;
+        }
+
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(text).then(
+            function () {
+              markCopied(button);
+            },
+            function () {
+              fallbackCopyText(text);
+              markCopied(button);
+            }
+          );
+          return;
+        }
+
+        fallbackCopyText(text);
+        markCopied(button);
+      });
+    });
   }
 
   function initCopyFields() {
@@ -248,5 +323,6 @@
   document.addEventListener('DOMContentLoaded', function () {
     initBuilder();
     initCopyFields();
+    initCopyButtons();
   });
 })();
