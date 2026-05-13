@@ -50,6 +50,7 @@ class Menuosaur_Plugin {
             'square_location_id' => '',
             'sort_variations_by_price' => 0,
             'hide_currency_symbol' => 0,
+            'admin_menu_label' => 'Menuosaur',
         );
     }
 
@@ -89,9 +90,11 @@ class Menuosaur_Plugin {
     }
 
     public function register_admin_menu() {
+        $admin_menu_label = $this->get_admin_menu_label();
+
         add_menu_page(
             __('Menuosaur', 'menuosaur'),
-            __('Menuosaur', 'menuosaur'),
+            $admin_menu_label,
             'manage_options',
             'menuosaur-menus',
             array($this, 'render_admin_page'),
@@ -707,6 +710,14 @@ class Menuosaur_Plugin {
         echo '<p class="description">' . esc_html__('Optional. When set, Square item search is filtered to items enabled for this location.', 'menuosaur') . '</p>';
         echo '</td></tr>';
 
+        echo '<tr><th scope="row"><label for="menuosaur_admin_menu_label">' . esc_html__('Sidebar menu name', 'menuosaur') . '</label></th><td>';
+        echo '<span class="menuosaur-input-decor menuosaur-input-medium">';
+        echo '<span class="menuosaur-input-icon"><i class="fa-duotone fa-sidebar" aria-hidden="true"></i></span>';
+        echo '<input type="text" name="admin_menu_label" id="menuosaur_admin_menu_label" value="' . esc_attr($this->get_admin_menu_label()) . '" class="regular-text" maxlength="80" />';
+        echo '</span>';
+        echo '<p class="description">' . esc_html__('This changes the top-level WordPress admin sidebar label. Leave it blank to use Menuosaur.', 'menuosaur') . '</p>';
+        echo '</td></tr>';
+
         echo '<tr><th scope="row">' . esc_html__('Menu display', 'menuosaur') . '</th><td>';
         echo '<p><label><input type="checkbox" name="sort_variations_by_price" value="1" ' . checked(!empty($this->settings['sort_variations_by_price']), true, false) . ' /> ' . esc_html__('Always display cheaper price variations first', 'menuosaur') . '</label></p>';
         echo '<p class="description">' . esc_html__('When enabled, public menus ignore saved variation order for prices and sort selected variations from cheapest to most expensive.', 'menuosaur') . '</p>';
@@ -835,6 +846,7 @@ class Menuosaur_Plugin {
             'square_location_id' => isset($_POST['square_location_id']) ? trim(sanitize_text_field(wp_unslash($_POST['square_location_id']))) : $current['square_location_id'],
             'sort_variations_by_price' => isset($_POST['sort_variations_by_price']) ? 1 : 0,
             'hide_currency_symbol' => isset($_POST['hide_currency_symbol']) ? 1 : 0,
+            'admin_menu_label' => isset($_POST['admin_menu_label']) ? $this->sanitize_admin_menu_label(wp_unslash($_POST['admin_menu_label'])) : $this->sanitize_admin_menu_label($current['admin_menu_label']),
         );
 
         update_option('menuosaur_settings', $updated);
@@ -1979,6 +1991,23 @@ class Menuosaur_Plugin {
 
     private function get_square_access_token() {
         return isset($this->settings['square_access_token']) ? trim((string) $this->settings['square_access_token']) : '';
+    }
+
+    private function get_admin_menu_label() {
+        return $this->sanitize_admin_menu_label(isset($this->settings['admin_menu_label']) ? $this->settings['admin_menu_label'] : '');
+    }
+
+    private function sanitize_admin_menu_label($label) {
+        $label = trim(sanitize_text_field((string) $label));
+        if ($label === '') {
+            return 'Menuosaur';
+        }
+
+        if (function_exists('mb_substr')) {
+            return mb_substr($label, 0, 80, 'UTF-8');
+        }
+
+        return substr($label, 0, 80);
     }
 
     private function get_category_display_label($category) {

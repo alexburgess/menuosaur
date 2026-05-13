@@ -15,6 +15,7 @@ It reads Square categories, items, item variations, prices, descriptions, custom
 - Drag-and-drop item and variation ordering in the admin builder.
 - Global option to display cheaper variations first.
 - Global option to remove currency symbols from rendered prices.
+- Configurable WordPress admin sidebar menu label.
 - Per-menu display controls for item name, image, description, prices, and selected custom attributes.
 - Theme-neutral frontend markup for easy styling.
 
@@ -144,4 +145,3 @@ Common classes:
 - Rendered shortcodes use cached Square object IDs, so item names and prices update after the next sync.
 - If a selected item or variation is deleted or archived in Square, the public shortcode hides it and the admin builder shows a cleanup warning.
 - Square access tokens are stored in WordPress options and only sent server-side.
-
