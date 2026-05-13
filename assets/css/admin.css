@@ -1,0 +1,361 @@
+.menuosaur-wrap {
+  max-width: 1200px;
+}
+
+.menuosaur-wrap > h1 {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 700;
+}
+
+.menuosaur-heading-icon {
+  display: inline-block;
+  width: 34px;
+  height: 34px;
+  background: #2271b1;
+  -webkit-mask-image: url("../icon.svg");
+  -webkit-mask-position: center;
+  -webkit-mask-repeat: no-repeat;
+  -webkit-mask-size: contain;
+  mask-image: url("../icon.svg");
+  mask-position: center;
+  mask-repeat: no-repeat;
+  mask-size: contain;
+}
+
+.menuosaur-wrap table.widefat,
+.menuosaur-wrap .stuffbox {
+  border: 0;
+}
+
+.menuosaur-wrap .fa-duotone {
+  --fa-primary-color: #2271b1;
+  --fa-secondary-color: #72aee6;
+  --fa-secondary-opacity: 1;
+}
+
+.menuosaur-wrap .fa-circle-plus,
+.menuosaur-wrap .fa-floppy-disk,
+.menuosaur-wrap .fa-plug {
+  --fa-primary-color: #1e8e3e;
+  --fa-secondary-color: #a9e7ba;
+}
+
+.menuosaur-wrap .fa-arrows-rotate,
+.menuosaur-wrap .fa-clock-rotate-left {
+  --fa-primary-color: #0f766e;
+  --fa-secondary-color: #9ce3d9;
+}
+
+.menuosaur-wrap .fa-gear,
+.menuosaur-wrap .fa-code-branch,
+.menuosaur-wrap .fa-key {
+  --fa-primary-color: #4f5d75;
+  --fa-secondary-color: #bfc8d6;
+}
+
+.menuosaur-wrap .fa-tags,
+.menuosaur-wrap .fa-layer-group,
+.menuosaur-wrap .fa-utensils {
+  --fa-primary-color: #8a5a00;
+  --fa-secondary-color: #f0ca84;
+}
+
+.menuosaur-nav-tabs {
+  margin-bottom: 18px;
+}
+
+.menuosaur-nav-tabs .nav-tab i {
+  margin-right: 6px;
+}
+
+.menuosaur-card {
+  background: #fff;
+  border: 1px solid #dcdcde;
+  border-radius: 8px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  margin: 16px 0;
+  padding: 20px;
+}
+
+.menuosaur-card h2 {
+  margin-top: 0;
+}
+
+.menuosaur-card h2 i {
+  margin-right: 8px;
+}
+
+.menuosaur-grid {
+  display: grid;
+  gap: 16px;
+}
+
+.menuosaur-grid-overview {
+  grid-template-columns: repeat(3, minmax(180px, 1fr));
+}
+
+.menuosaur-metric-value {
+  font-size: 1.8rem;
+  font-weight: 700;
+  margin: 8px 0 0;
+}
+
+.menuosaur-inline-form {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.menuosaur-input-decor {
+  align-items: center;
+  background: #fff;
+  border: 1px solid #8c8f94;
+  border-radius: 6px;
+  display: inline-flex;
+  max-width: 100%;
+  min-height: 36px;
+  overflow: hidden;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.menuosaur-input-decor:focus-within {
+  border-color: #2271b1;
+  box-shadow: 0 0 0 1px #2271b1;
+}
+
+.menuosaur-input-wide {
+  width: min(480px, 100%);
+}
+
+.menuosaur-input-medium {
+  width: min(280px, 100%);
+}
+
+.menuosaur-input-icon {
+  align-items: center;
+  align-self: stretch;
+  background: #f0f6fc;
+  border-right: 1px solid #c5d9ed;
+  display: inline-flex;
+  justify-content: center;
+  width: 42px;
+}
+
+.menuosaur-input-decor input[type="text"],
+.menuosaur-input-decor input[type="password"] {
+  border: 0;
+  box-shadow: none;
+  flex: 1;
+  margin: 0;
+  min-height: 36px;
+  min-width: 0;
+}
+
+.menuosaur-builder-grid {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(2, minmax(260px, 1fr));
+  max-width: 900px;
+}
+
+.menuosaur-builder-grid label,
+.menuosaur-builder-options > label:first-child {
+  display: block;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.menuosaur-builder-options {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-bottom: 16px;
+}
+
+.menuosaur-display-panel {
+  background: #f6f7f7;
+  border: 1px solid #dcdcde;
+  border-radius: 8px;
+  margin: 0 0 16px;
+  padding: 14px;
+}
+
+.menuosaur-display-panel h3,
+.menuosaur-display-panel h4 {
+  margin: 0 0 10px;
+}
+
+.menuosaur-display-options,
+.menuosaur-attribute-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 18px;
+}
+
+.menuosaur-image-size-field {
+  margin-top: 14px;
+}
+
+.menuosaur-image-size-field label {
+  display: block;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.menuosaur-custom-attributes {
+  margin-top: 14px;
+}
+
+.menuosaur-attribute-label-toggle {
+  margin-top: 10px;
+}
+
+.menuosaur-category-select {
+  min-width: 280px;
+}
+
+.menuosaur-category-help {
+  flex-basis: 100%;
+  margin: -8px 0 0;
+}
+
+.menuosaur-checkbox-label {
+  align-items: center;
+  display: inline-flex;
+  gap: 6px;
+  margin: 0;
+}
+
+.menuosaur-item-picker {
+  display: grid;
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.menuosaur-picker-placeholder,
+.menuosaur-picker-empty {
+  color: #646970;
+  margin: 0;
+}
+
+.menuosaur-item-card {
+  border: 1px solid #dcdcde;
+  border-radius: 8px;
+  padding: 14px;
+}
+
+.menuosaur-item-card.is-selected {
+  border-color: #8fb4d3;
+  box-shadow: 0 0 0 1px #8fb4d3;
+}
+
+.menuosaur-item-card.is-dragging,
+.menuosaur-variation-row.is-dragging {
+  opacity: 0.45;
+}
+
+.menuosaur-item-card-head,
+.menuosaur-variation-row {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  justify-content: flex-start;
+}
+
+.menuosaur-drag-handle {
+  align-items: center;
+  background: #f0f0f1;
+  border: 1px solid #c3c4c7;
+  border-radius: 6px;
+  color: #50575e;
+  cursor: grab;
+  display: inline-flex;
+  flex: 0 0 auto;
+  height: 30px;
+  justify-content: center;
+  padding: 0;
+  width: 30px;
+}
+
+.menuosaur-drag-handle:active {
+  cursor: grabbing;
+}
+
+.menuosaur-item-check {
+  align-items: center;
+  display: inline-flex;
+  flex: 1 1 auto;
+  gap: 8px;
+  font-weight: 600;
+}
+
+.menuosaur-item-description-preview {
+  color: #50575e;
+  margin: 8px 0 0 25px;
+}
+
+.menuosaur-variation-list {
+  display: grid;
+  gap: 8px;
+  margin: 12px 0 0 25px;
+}
+
+.menuosaur-variation-row {
+  background: #f6f7f7;
+  border-radius: 6px;
+  padding: 8px 10px;
+}
+
+.menuosaur-variation-row label {
+  flex: 1 1 auto;
+}
+
+.menuosaur-status-pill {
+  border-radius: 999px;
+  display: inline-block;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  padding: 5px 8px;
+}
+
+.menuosaur-status-active {
+  background: #e7f5ec;
+  color: #1e7a36;
+}
+
+.menuosaur-status-inactive {
+  background: #f2f2f3;
+  color: #646970;
+}
+
+.menuosaur-warning-list {
+  margin: 0.5em 0;
+}
+
+.menuosaur-copy-field {
+  width: min(360px, 100%);
+}
+
+.menuosaur-about-credit {
+  color: #50575e;
+  margin-bottom: 0;
+}
+
+@media (max-width: 782px) {
+  .menuosaur-grid-overview,
+  .menuosaur-builder-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .menuosaur-item-card-head,
+  .menuosaur-variation-row,
+  .menuosaur-builder-options {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
