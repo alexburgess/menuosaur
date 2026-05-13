@@ -802,6 +802,7 @@ class Menuosaur_Plugin {
         $category_ids = $this->sanitize_category_ids_from_request();
         $category_id = !empty($category_ids) ? $category_ids[0] : '';
         $config = $this->build_shortcode_config_from_request($category_ids);
+        $this->ensure_shortcode_image_objects($config);
 
         $result = $this->manager->update_shortcode(
             $shortcode_id,
@@ -824,6 +825,10 @@ class Menuosaur_Plugin {
             ),
             admin_url('admin.php')
         );
+
+        if (!is_wp_error($result)) {
+            $this->queue_shortcode_config_images($config);
+        }
 
         $this->redirect_with_result($url, $result, __('Shortcode saved.', 'menuosaur'));
     }
@@ -1026,7 +1031,7 @@ class Menuosaur_Plugin {
             return $error;
         }
 
-        $catalog_objects = $this->fetch_square_catalog_objects(array('CATEGORY', 'IMAGE'));
+        $catalog_objects = $this->fetch_square_catalog_objects(array('CATEGORY'));
         if (is_wp_error($catalog_objects)) {
             $this->log_failed_sync($trigger_type, $started_at, $catalog_objects);
             return $catalog_objects;
@@ -1055,8 +1060,6 @@ class Menuosaur_Plugin {
 
             if ($catalog_object['type'] === 'CATEGORY') {
                 $normal = $this->normalize_square_category($catalog_object);
-            } elseif ($catalog_object['type'] === 'IMAGE') {
-                $normal = $this->normalize_square_image($catalog_object);
             } else {
                 $normal = null;
             }
@@ -1183,6 +1186,44 @@ class Menuosaur_Plugin {
 
             $cursor = isset($response['cursor']) ? (string) $response['cursor'] : '';
         } while ($cursor !== '');
+
+        return $objects;
+    }
+
+    private function fetch_square_catalog_objects_by_ids($object_ids) {
+        $object_ids = array_values(
+            array_filter(
+                array_unique(array_map('strval', (array) $object_ids)),
+                function ($object_id) {
+                    return $object_id !== '';
+                }
+            )
+        );
+
+        if (empty($object_ids)) {
+            return array();
+        }
+
+        $objects = array();
+        foreach (array_chunk($object_ids, 100) as $chunk) {
+            $response = $this->square_request(
+                'POST',
+                '/catalog/batch-retrieve',
+                array(
+                    'object_ids' => array_values($chunk),
+                    'include_related_objects' => false,
+                )
+            );
+            if (is_wp_error($response)) {
+                return $response;
+            }
+
+            if (!empty($response['objects']) && is_array($response['objects'])) {
+                foreach ($response['objects'] as $object) {
+                    $objects[] = $object;
+                }
+            }
+        }
 
         return $objects;
     }
@@ -1525,7 +1566,11 @@ class Menuosaur_Plugin {
         foreach ($image_ids as $image_id) {
             $image = $this->manager->get_catalog_object($image_id);
             if (!$image || $image['object_type'] !== 'IMAGE' || $image['is_deleted']) {
-                continue;
+                $this->fetch_and_cache_square_images(array($image_id));
+                $image = $this->manager->get_catalog_object($image_id);
+                if (!$image || $image['object_type'] !== 'IMAGE' || $image['is_deleted']) {
+                    continue;
+                }
             }
 
             $raw = isset($image['raw_json']['image_data']) && is_array($image['raw_json']['image_data']) ? $image['raw_json']['image_data'] : array();
@@ -1577,29 +1622,112 @@ class Menuosaur_Plugin {
     private function queue_selected_shortcode_images() {
         $queued = 0;
         foreach ($this->manager->get_shortcodes() as $shortcode) {
-            if (empty($shortcode['config']['display']['show_item_image'])) {
+            $this->ensure_shortcode_image_objects($shortcode['config']);
+            $queued += $this->queue_shortcode_config_images($shortcode['config']);
+        }
+
+        return $queued;
+    }
+
+    private function ensure_shortcode_image_objects($config) {
+        if (empty($config['display']['show_item_image']) || empty($config['item_order']) || !is_array($config['item_order'])) {
+            return 0;
+        }
+
+        $image_ids = array();
+        foreach ($config['item_order'] as $item_id) {
+            $item = $this->manager->get_catalog_object($item_id);
+            if (!$item || $item['object_type'] !== 'ITEM' || $item['is_deleted'] || $item['is_archived']) {
                 continue;
             }
 
-            $image_size = $this->sanitize_image_size(isset($shortcode['config']['display']['image_size']) ? $shortcode['config']['display']['image_size'] : 'square_original');
-            if ($image_size === 'square_original') {
+            foreach ($this->get_item_square_image_ids($item) as $image_id) {
+                $image_ids[] = $image_id;
+            }
+        }
+
+        return $this->fetch_and_cache_square_images($image_ids);
+    }
+
+    private function queue_shortcode_config_images($config) {
+        if (empty($config['display']['show_item_image']) || empty($config['item_order']) || !is_array($config['item_order'])) {
+            return 0;
+        }
+
+        $image_size = $this->sanitize_image_size(isset($config['display']['image_size']) ? $config['display']['image_size'] : 'square_original');
+        if ($image_size === 'square_original') {
+            return 0;
+        }
+
+        $queued = 0;
+        foreach ($config['item_order'] as $item_id) {
+            $item = $this->manager->get_catalog_object($item_id);
+            if (!$item || $item['object_type'] !== 'ITEM' || $item['is_deleted'] || $item['is_archived']) {
                 continue;
             }
 
-            foreach ((array) $shortcode['config']['item_order'] as $item_id) {
-                $item = $this->manager->get_catalog_object($item_id);
-                if (!$item || $item['object_type'] !== 'ITEM' || $item['is_deleted'] || $item['is_archived']) {
-                    continue;
-                }
-
-                $source = $this->get_item_image_source($item);
-                if ($source && $this->queue_remote_image_cache($source['cache_key'], $source['url'], $source['title'], $source['alt'], $source['version'])) {
-                    $queued++;
-                }
+            $source = $this->get_item_image_source($item);
+            if ($source && $this->queue_remote_image_cache($source['cache_key'], $source['url'], $source['title'], $source['alt'], $source['version'])) {
+                $queued++;
             }
         }
 
         return $queued;
+    }
+
+    private function get_item_square_image_ids($item) {
+        if (empty($item['raw_json']['item_data']) || !is_array($item['raw_json']['item_data'])) {
+            return array();
+        }
+
+        $item_data = $item['raw_json']['item_data'];
+        if (empty($item_data['image_ids']) || !is_array($item_data['image_ids'])) {
+            return array();
+        }
+
+        return array_values(
+            array_filter(
+                array_unique(array_map('strval', $item_data['image_ids'])),
+                function ($image_id) {
+                    return $image_id !== '';
+                }
+            )
+        );
+    }
+
+    private function fetch_and_cache_square_images($image_ids) {
+        $image_ids = array_values(
+            array_filter(
+                array_unique(array_map('strval', (array) $image_ids)),
+                function ($image_id) {
+                    return $image_id !== '';
+                }
+            )
+        );
+
+        if (empty($image_ids) || $this->get_square_access_token() === '') {
+            return 0;
+        }
+
+        $objects = $this->fetch_square_catalog_objects_by_ids($image_ids);
+        if (is_wp_error($objects)) {
+            return 0;
+        }
+
+        $normalized = array();
+        foreach ($objects as $object) {
+            $normal = $this->normalize_square_image($object);
+            if ($normal) {
+                $normalized[] = $normal;
+            }
+        }
+
+        if (empty($normalized)) {
+            return 0;
+        }
+
+        $result = $this->manager->upsert_catalog_cache($normalized);
+        return is_wp_error($result) ? 0 : (int) $result['images'];
     }
 
     private function queue_remote_image_cache($cache_key, $source_url, $title, $alt, $version) {

@@ -260,12 +260,31 @@ class Menuosaur_Manager {
         }
 
         $now = $this->now_gmt();
-        $this->wpdb->query(
-            $this->wpdb->prepare(
-                "UPDATE {$this->catalog_table} SET is_deleted = 1, updated_at = %s",
-                $now
-            )
-        );
+        $replace_types = array();
+        foreach ($objects as $object) {
+            if (is_array($object) && !empty($object['object_type'])) {
+                $replace_types[(string) $object['object_type']] = true;
+            }
+        }
+
+        if (!empty($replace_types)) {
+            $types = array_keys($replace_types);
+            $placeholders = implode(', ', array_fill(0, count($types), '%s'));
+            $this->wpdb->query(
+                $this->wpdb->prepare(
+                    "UPDATE {$this->catalog_table} SET is_deleted = 1, updated_at = %s WHERE object_type IN ({$placeholders})",
+                    array_merge(array($now), $types)
+                )
+            );
+        }
+
+        return $this->upsert_catalog_cache($objects);
+    }
+
+    public function upsert_catalog_cache($objects) {
+        if (!is_array($objects)) {
+            return new WP_Error('menuosaur_invalid_catalog_cache', __('Invalid catalog cache payload.', 'menuosaur'));
+        }
 
         $counts = array(
             'CATEGORY' => 0,
@@ -274,6 +293,7 @@ class Menuosaur_Manager {
             'IMAGE' => 0,
         );
 
+        $now = $this->now_gmt();
         foreach ($objects as $object) {
             if (!is_array($object) || empty($object['object_id']) || empty($object['object_type'])) {
                 continue;

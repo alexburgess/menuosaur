@@ -8,7 +8,7 @@ It reads Square categories, items, item variations, prices, descriptions, custom
 
 - Square Catalog API sync using WordPress HTTP functions.
 - Manual sync plus hourly WordPress cron refresh.
-- Local catalog cache for categories, items, variations, prices, descriptions, custom attributes, and image objects.
+- Local catalog cache for categories, items, variations, prices, descriptions, custom attributes, and selected menu image objects.
 - Queued WordPress Media Library image caching for Square images.
 - Per-menu image source choices: original Square URL, WordPress thumbnail, WordPress medium, or WordPress large.
 - Multi-category menu shortcodes.
@@ -144,6 +144,6 @@ Common classes:
 
 - Menuosaur reads Square catalog data; it does not create or update Square items.
 - Rendered shortcodes use cached Square object IDs, so item names and prices update after the next sync.
-- WordPress image sizes are generated in a background queue. A menu may briefly fall back to the original Square image URL until the cached attachment exists.
+- Square image objects and WordPress image sizes are fetched only for menus configured to display images. A menu may briefly fall back to the original Square image URL until the cached attachment exists.
 - If a selected item or variation is deleted or archived in Square, the public shortcode hides it and the admin builder shows a cleanup warning.
 - Square access tokens are stored in WordPress options and only sent server-side.
