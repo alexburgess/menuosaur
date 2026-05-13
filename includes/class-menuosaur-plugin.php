@@ -4,6 +4,8 @@ if (!defined('ABSPATH')) {
 }
 
 class Menuosaur_Plugin {
+    const IMAGE_CACHE_CRON_HOOK = 'menuosaur_image_cache_batch';
+
     /**
      * @var Menuosaur_Plugin|null
      */
@@ -40,6 +42,7 @@ class Menuosaur_Plugin {
 
     public static function deactivate() {
         Menuosaur_Manager::clear_sync_event();
+        wp_clear_scheduled_hook(self::IMAGE_CACHE_CRON_HOOK);
     }
 
     public static function default_settings() {
@@ -70,6 +73,7 @@ class Menuosaur_Plugin {
         add_action('admin_post_menuosaur_test_square_connection', array($this, 'handle_test_square_connection'));
 
         add_action(Menuosaur_Manager::CRON_HOOK, array($this, 'handle_scheduled_sync'));
+        add_action(self::IMAGE_CACHE_CRON_HOOK, array($this, 'handle_image_cache_batch'));
         add_shortcode('menuosaur', array($this, 'render_shortcode'));
     }
 
@@ -1065,9 +1069,7 @@ class Menuosaur_Plugin {
             $this->log_failed_sync($trigger_type, $started_at, $result);
             return $result;
         }
-        $image_cache_result = $this->cache_square_images_from_catalog($normalized);
-        $result['image_attachments'] = $image_cache_result['cached'];
-        $result['image_cache_errors'] = $image_cache_result['errors'];
+        $result['image_cache_queue'] = $this->queue_selected_shortcode_images();
 
         $this->manager->log_sync(array(
             'status' => 'success',
@@ -1081,6 +1083,47 @@ class Menuosaur_Plugin {
         ));
 
         return $result;
+    }
+
+    public function handle_image_cache_batch() {
+        $queue = get_option('menuosaur_image_cache_queue', array());
+        if (!is_array($queue) || empty($queue)) {
+            return;
+        }
+
+        $remaining = $queue;
+        $processed = 0;
+        foreach ($queue as $cache_key => $job) {
+            if ($processed >= 5) {
+                break;
+            }
+
+            unset($remaining[$cache_key]);
+            $processed++;
+
+            if (!is_array($job) || empty($job['source_url'])) {
+                continue;
+            }
+
+            $attempts = isset($job['attempts']) ? absint($job['attempts']) : 0;
+            $result = $this->cache_remote_image(
+                $cache_key,
+                (string) $job['source_url'],
+                isset($job['title']) ? (string) $job['title'] : '',
+                isset($job['alt']) ? (string) $job['alt'] : '',
+                isset($job['version']) ? (int) $job['version'] : 0
+            );
+
+            if (is_wp_error($result) && $attempts < 2) {
+                $job['attempts'] = $attempts + 1;
+                $remaining[$cache_key] = $job;
+            }
+        }
+
+        update_option('menuosaur_image_cache_queue', $remaining, false);
+        if (!empty($remaining) && !wp_next_scheduled(self::IMAGE_CACHE_CRON_HOOK)) {
+            wp_schedule_single_event(time() + 120, self::IMAGE_CACHE_CRON_HOOK);
+        }
     }
 
     private function test_square_connection() {
@@ -1421,36 +1464,51 @@ class Menuosaur_Plugin {
     }
 
     private function get_item_image_data($item, $preferred_size = 'square_original') {
+        $source = $this->get_item_image_source($item);
+        if (!$source) {
+            return null;
+        }
+
+        $preferred_size = $this->sanitize_image_size($preferred_size);
+        if ($preferred_size !== 'square_original') {
+            $cached = $this->get_cached_remote_image_data(
+                $source['cache_key'],
+                $source['url'],
+                $source['title'],
+                $source['alt'],
+                $source['version'],
+                $preferred_size
+            );
+            if ($cached) {
+                return $cached;
+            }
+        }
+
+        return array(
+            'url' => $source['url'],
+            'alt' => $source['alt'],
+        );
+    }
+
+    private function get_item_image_source($item) {
         if (empty($item['raw_json']['item_data']) || !is_array($item['raw_json']['item_data'])) {
             return null;
         }
 
         $item_data = $item['raw_json']['item_data'];
         $image_ids = array();
-        $preferred_size = $this->sanitize_image_size($preferred_size);
 
         if (!empty($item_data['image_ids']) && is_array($item_data['image_ids'])) {
             $image_ids = $item_data['image_ids'];
         } elseif (!empty($item_data['ecom_image_uris']) && is_array($item_data['ecom_image_uris'])) {
             $first_uri = reset($item_data['ecom_image_uris']);
             if (is_string($first_uri) && $first_uri !== '') {
-                if ($preferred_size !== 'square_original') {
-                    $cached = $this->get_cached_remote_image_data(
-                        'ecom-' . md5($first_uri),
-                        $first_uri,
-                        isset($item['name']) ? (string) $item['name'] : '',
-                        '',
-                        0,
-                        $preferred_size
-                    );
-                    if ($cached) {
-                        return $cached;
-                    }
-                }
-
                 return array(
+                    'cache_key' => 'ecom-' . md5($first_uri),
                     'url' => $first_uri,
+                    'title' => isset($item['name']) ? (string) $item['name'] : '',
                     'alt' => isset($item['name']) ? (string) $item['name'] : '',
+                    'version' => 0,
                 );
             }
         }
@@ -1471,67 +1529,22 @@ class Menuosaur_Plugin {
                 ? (string) $raw['caption']
                 : (isset($image['name']) ? (string) $image['name'] : '');
 
-            if ($preferred_size !== 'square_original') {
-                $cached = $this->get_cached_remote_image_data(
-                    (string) $image['object_id'],
-                    $url,
-                    isset($image['name']) && $image['name'] !== '' ? (string) $image['name'] : (isset($item['name']) ? (string) $item['name'] : ''),
-                    $alt,
-                    isset($image['version']) ? (int) $image['version'] : 0,
-                    $preferred_size
-                );
-                if ($cached) {
-                    return $cached;
-                }
-            }
-
             return array(
+                'cache_key' => (string) $image['object_id'],
                 'url' => $url,
+                'title' => isset($image['name']) && $image['name'] !== '' ? (string) $image['name'] : (isset($item['name']) ? (string) $item['name'] : ''),
                 'alt' => $alt,
+                'version' => isset($image['version']) ? (int) $image['version'] : 0,
             );
         }
 
         return null;
     }
 
-    private function cache_square_images_from_catalog($objects) {
-        $result = array(
-            'cached' => 0,
-            'errors' => 0,
-        );
-
-        foreach ($objects as $object) {
-            if (!is_array($object) || empty($object['object_type']) || $object['object_type'] !== 'IMAGE' || !empty($object['is_deleted'])) {
-                continue;
-            }
-
-            $raw = isset($object['raw_json']['image_data']) && is_array($object['raw_json']['image_data']) ? $object['raw_json']['image_data'] : array();
-            $url = isset($raw['url']) ? (string) $raw['url'] : '';
-            if ($url === '') {
-                continue;
-            }
-
-            $attachment_id = $this->cache_remote_image(
-                (string) $object['object_id'],
-                $url,
-                isset($object['name']) ? (string) $object['name'] : '',
-                isset($raw['caption']) ? (string) $raw['caption'] : '',
-                isset($object['version']) ? (int) $object['version'] : 0
-            );
-
-            if (is_wp_error($attachment_id)) {
-                $result['errors']++;
-            } elseif ($attachment_id) {
-                $result['cached']++;
-            }
-        }
-
-        return $result;
-    }
-
     private function get_cached_remote_image_data($cache_key, $source_url, $title, $alt, $version, $size) {
-        $attachment_id = $this->cache_remote_image($cache_key, $source_url, $title, $alt, $version);
-        if (is_wp_error($attachment_id) || !$attachment_id) {
+        $attachment_id = $this->get_cached_attachment_id($cache_key, $source_url, $version);
+        if (!$attachment_id) {
+            $this->queue_remote_image_cache($cache_key, $source_url, $title, $alt, $version);
             return null;
         }
 
@@ -1552,11 +1565,66 @@ class Menuosaur_Plugin {
         );
     }
 
-    private function cache_remote_image($cache_key, $source_url, $title, $alt, $version) {
+    private function queue_selected_shortcode_images() {
+        $queued = 0;
+        foreach ($this->manager->get_shortcodes() as $shortcode) {
+            if (empty($shortcode['config']['display']['show_item_image'])) {
+                continue;
+            }
+
+            $image_size = $this->sanitize_image_size(isset($shortcode['config']['display']['image_size']) ? $shortcode['config']['display']['image_size'] : 'square_original');
+            if ($image_size === 'square_original') {
+                continue;
+            }
+
+            foreach ((array) $shortcode['config']['item_order'] as $item_id) {
+                $item = $this->manager->get_catalog_object($item_id);
+                if (!$item || $item['object_type'] !== 'ITEM' || $item['is_deleted'] || $item['is_archived']) {
+                    continue;
+                }
+
+                $source = $this->get_item_image_source($item);
+                if ($source && $this->queue_remote_image_cache($source['cache_key'], $source['url'], $source['title'], $source['alt'], $source['version'])) {
+                    $queued++;
+                }
+            }
+        }
+
+        return $queued;
+    }
+
+    private function queue_remote_image_cache($cache_key, $source_url, $title, $alt, $version) {
+        $cache_key = sanitize_key((string) $cache_key);
+        $source_url = esc_url_raw((string) $source_url);
+        if ($cache_key === '' || $source_url === '' || $this->get_cached_attachment_id($cache_key, $source_url, $version)) {
+            return false;
+        }
+
+        $queue = get_option('menuosaur_image_cache_queue', array());
+        $queue = is_array($queue) ? $queue : array();
+        $existing_attempts = isset($queue[$cache_key]['attempts']) ? absint($queue[$cache_key]['attempts']) : 0;
+        $queue[$cache_key] = array(
+            'source_url' => $source_url,
+            'title' => wp_strip_all_tags((string) $title),
+            'alt' => wp_strip_all_tags((string) $alt),
+            'version' => (int) $version,
+            'attempts' => $existing_attempts,
+            'queued_at' => $this->manager->now_gmt(),
+        );
+        update_option('menuosaur_image_cache_queue', $queue, false);
+
+        if (!wp_next_scheduled(self::IMAGE_CACHE_CRON_HOOK)) {
+            wp_schedule_single_event(time() + 60, self::IMAGE_CACHE_CRON_HOOK);
+        }
+
+        return true;
+    }
+
+    private function get_cached_attachment_id($cache_key, $source_url, $version) {
         $cache_key = sanitize_key((string) $cache_key);
         $source_url = esc_url_raw((string) $source_url);
         if ($cache_key === '' || $source_url === '') {
-            return new WP_Error('menuosaur_invalid_image_cache_source', __('Invalid image cache source.', 'menuosaur'));
+            return 0;
         }
 
         $cache = get_option('menuosaur_image_cache', array());
@@ -1570,6 +1638,21 @@ class Menuosaur_Plugin {
             && (string) $existing['source_url'] === $source_url
             && (int) $existing['version'] === (int) $version
         ) {
+            return $existing_id;
+        }
+
+        return 0;
+    }
+
+    private function cache_remote_image($cache_key, $source_url, $title, $alt, $version) {
+        $cache_key = sanitize_key((string) $cache_key);
+        $source_url = esc_url_raw((string) $source_url);
+        if ($cache_key === '' || $source_url === '') {
+            return new WP_Error('menuosaur_invalid_image_cache_source', __('Invalid image cache source.', 'menuosaur'));
+        }
+
+        $existing_id = $this->get_cached_attachment_id($cache_key, $source_url, $version);
+        if ($existing_id) {
             return $existing_id;
         }
 
@@ -1600,6 +1683,8 @@ class Menuosaur_Plugin {
         update_post_meta($attachment_id, '_menuosaur_square_image_source_url', $source_url);
         update_post_meta($attachment_id, '_menuosaur_square_image_version', (int) $version);
 
+        $cache = get_option('menuosaur_image_cache', array());
+        $cache = is_array($cache) ? $cache : array();
         $cache[$cache_key] = array(
             'attachment_id' => (int) $attachment_id,
             'source_url' => $source_url,
