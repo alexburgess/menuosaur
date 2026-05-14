@@ -587,7 +587,9 @@ class Menuosaur_Manager {
             $normalized['display']['show_item_image'] = !empty($display['show_item_image']) ? 1 : 0;
             $normalized['display']['show_description'] = !empty($display['show_description']) ? 1 : 0;
             $normalized['display']['show_prices'] = !empty($display['show_prices']) ? 1 : 0;
-            $normalized['display']['show_dietary_symbols'] = !empty($display['show_dietary_symbols']) ? 1 : 0;
+            if (array_key_exists('show_dietary_symbols', $display)) {
+                $normalized['display']['show_dietary_symbols'] = !empty($display['show_dietary_symbols']) ? 1 : 0;
+            }
             $normalized['display']['show_custom_attribute_labels'] = !empty($display['show_custom_attribute_labels']) ? 1 : 0;
             if (isset($display['image_size']) && in_array($display['image_size'], array('square_original', 'thumbnail', 'medium', 'large'), true)) {
                 $normalized['display']['image_size'] = $display['image_size'];
