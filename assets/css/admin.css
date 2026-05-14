@@ -407,6 +407,29 @@
   width: min(360px, 100%);
 }
 
+.menuosaur-shortcode-examples {
+  display: grid;
+  gap: 14px;
+  margin-top: 16px;
+}
+
+.menuosaur-shortcode-example {
+  border: 1px solid #dcdcde;
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.menuosaur-shortcode-example h3 {
+  margin: 0 0 8px;
+}
+
+.menuosaur-copy-row {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .menuosaur-actions {
   white-space: nowrap;
 }

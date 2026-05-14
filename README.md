@@ -55,6 +55,12 @@ To show a key for the dietary/allergen symbols used by Menuosaur menus on the sa
 [menuosaur_symbol_key]
 ```
 
+Hide the default title:
+
+```text
+[menuosaur_symbol_key show_title="0"]
+```
+
 You can also target specific menus explicitly:
 
 ```text

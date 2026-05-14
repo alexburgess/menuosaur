@@ -133,6 +133,15 @@ class Menuosaur_Plugin {
 
         add_submenu_page(
             'menuosaur-menus',
+            __('Symbol Key', 'menuosaur'),
+            __('Symbol Key', 'menuosaur'),
+            'manage_options',
+            'menuosaur-symbol-key',
+            array($this, 'render_admin_page')
+        );
+
+        add_submenu_page(
+            'menuosaur-menus',
             __('Menuosaur Settings', 'menuosaur'),
             __('Settings', 'menuosaur'),
             'manage_options',
@@ -220,6 +229,9 @@ class Menuosaur_Plugin {
             case 'sync':
                 $this->render_sync_tab();
                 break;
+            case 'symbol-key':
+                $this->render_symbol_key_tab();
+                break;
             case 'settings':
                 $this->render_settings_tab();
                 break;
@@ -245,6 +257,7 @@ class Menuosaur_Plugin {
         $page = isset($_GET['page']) ? sanitize_key(wp_unslash($_GET['page'])) : 'menuosaur-menus';
         $page_map = array(
             'menuosaur-sync' => 'sync',
+            'menuosaur-symbol-key' => 'symbol-key',
             'menuosaur-settings' => 'settings',
             'menuosaur-about' => 'about',
             'menuosaur-menus' => 'menus',
@@ -262,6 +275,10 @@ class Menuosaur_Plugin {
             'sync' => array(
                 'label' => __('Catalog Sync', 'menuosaur'),
                 'icon' => 'fa-arrows-rotate',
+            ),
+            'symbol-key' => array(
+                'label' => __('Symbol Key', 'menuosaur'),
+                'icon' => 'fa-circle-question',
             ),
             'settings' => array(
                 'label' => __('Settings', 'menuosaur'),
@@ -832,6 +849,61 @@ class Menuosaur_Plugin {
         echo '</div>';
     }
 
+    private function render_symbol_key_tab() {
+        echo '<div class="menuosaur-card">';
+        echo '<h2><i class="fa-duotone fa-circle-question" aria-hidden="true"></i> ' . esc_html__('Symbol Key', 'menuosaur') . '</h2>';
+        echo '<p class="description">' . esc_html__('Use this shortcode to add a key for the dietary and allergen symbols shown by Menuosaur menus on the same page.', 'menuosaur') . '</p>';
+
+        $examples = array(
+            array(
+                'label' => __('Automatic key for this page', 'menuosaur'),
+                'shortcode' => '[menuosaur_symbol_key]',
+                'description' => __('Scans the current page content for Menuosaur menu shortcodes and lists only the symbols those menus display.', 'menuosaur'),
+            ),
+            array(
+                'label' => __('Automatic key with no title', 'menuosaur'),
+                'shortcode' => '[menuosaur_symbol_key show_title="0"]',
+                'description' => __('Outputs the key without the heading text.', 'menuosaur'),
+            ),
+            array(
+                'label' => __('Custom title', 'menuosaur'),
+                'shortcode' => '[menuosaur_symbol_key title="Dietary Key"]',
+                'description' => __('Changes the default title from Key to your own wording.', 'menuosaur'),
+            ),
+            array(
+                'label' => __('Specific menus', 'menuosaur'),
+                'shortcode' => '[menuosaur_symbol_key ids="tvtr-appetizers,tvtr-salads"]',
+                'description' => __('Builds the key from the listed Menuosaur shortcode IDs instead of scanning the page.', 'menuosaur'),
+            ),
+        );
+
+        echo '<div class="menuosaur-shortcode-examples">';
+        foreach ($examples as $example) {
+            echo '<div class="menuosaur-shortcode-example">';
+            echo '<h3>' . esc_html($example['label']) . '</h3>';
+            echo '<div class="menuosaur-copy-row">';
+            echo '<input type="text" class="regular-text code menuosaur-copy-field" readonly value="' . esc_attr($example['shortcode']) . '" />';
+            echo '<button type="button" class="button menuosaur-copy-button" data-menuosaur-copy="' . esc_attr($example['shortcode']) . '"><i class="fa-duotone fa-copy" aria-hidden="true"></i> <span>' . esc_html__('Copy shortcode', 'menuosaur') . '</span></button>';
+            echo '</div>';
+            echo '<p class="description">' . esc_html($example['description']) . '</p>';
+            echo '</div>';
+        }
+        echo '</div>';
+        echo '</div>';
+
+        echo '<div class="menuosaur-card">';
+        echo '<h2><i class="fa-duotone fa-eye" aria-hidden="true"></i> ' . esc_html__('Preview', 'menuosaur') . '</h2>';
+        $symbols = $this->collect_all_menu_food_symbols();
+        if (empty($symbols)) {
+            echo '<p class="description">' . esc_html__('No dietary or allergen symbols are currently available from active Menuosaur menus.', 'menuosaur') . '</p>';
+        } else {
+            echo '<p class="description">' . esc_html__('This preview shows all dietary and allergen symbols currently used by active Menuosaur menus.', 'menuosaur') . '</p>';
+            echo $this->render_symbol_key_markup($symbols, __('Key', 'menuosaur'), true);
+            echo $this->render_symbol_key_markup($symbols, '', false);
+        }
+        echo '</div>';
+    }
+
     private function render_metric_card($label, $value, $icon) {
         echo '<div class="menuosaur-card menuosaur-metric">';
         echo '<h2><i class="fa-duotone ' . esc_attr($icon) . '" aria-hidden="true"></i> ' . esc_html($label) . '</h2>';
@@ -1125,18 +1197,7 @@ class Menuosaur_Plugin {
         $title = trim(wp_strip_all_tags((string) $atts['title']));
         $show_title = !in_array(strtolower((string) $atts['show_title']), array('0', 'false', 'no', 'off'), true);
         $parts = array();
-        $parts[] = '<div class="menuosaur-symbol-key">';
-        if ($show_title && $title !== '') {
-            $parts[] = '<h4 class="menuosaur-symbol-key-title">' . esc_html($title) . '</h4>';
-        }
-        $parts[] = '<ul class="menuosaur-symbol-key-list">';
-
-        foreach ($symbols as $symbol) {
-            $parts[] = '<li class="menuosaur-symbol-key-item">' . $this->render_single_food_symbol($symbol) . '<span class="menuosaur-symbol-key-label">' . esc_html($this->get_food_symbol_key_label($symbol)) . '</span></li>';
-        }
-
-        $parts[] = '</ul>';
-        $parts[] = '</div>';
+        $parts[] = $this->render_symbol_key_markup($symbols, $title, $show_title);
 
         return implode('', $parts);
     }
@@ -2150,6 +2211,17 @@ class Menuosaur_Plugin {
         return $symbols;
     }
 
+    private function collect_all_menu_food_symbols() {
+        $symbols = array();
+        foreach ($this->manager->get_shortcodes() as $shortcode) {
+            foreach ($this->collect_shortcode_food_symbols($shortcode) as $symbol) {
+                $this->add_food_symbol_to_collection($symbols, $symbol);
+            }
+        }
+
+        return $symbols;
+    }
+
     private function get_menuosaur_shortcode_ids_from_current_post() {
         global $post;
 
@@ -2298,6 +2370,29 @@ class Menuosaur_Plugin {
         $html .= '</span>';
 
         return $html;
+    }
+
+    private function render_symbol_key_markup($symbols, $title, $show_title) {
+        if (empty($symbols)) {
+            return '';
+        }
+
+        $title = trim(wp_strip_all_tags((string) $title));
+        $parts = array();
+        $parts[] = '<div class="menuosaur-symbol-key">';
+        if ($show_title && $title !== '') {
+            $parts[] = '<h4 class="menuosaur-symbol-key-title">' . esc_html($title) . '</h4>';
+        }
+        $parts[] = '<ul class="menuosaur-symbol-key-list">';
+
+        foreach ($symbols as $symbol) {
+            $parts[] = '<li class="menuosaur-symbol-key-item">' . $this->render_single_food_symbol($symbol) . '<span class="menuosaur-symbol-key-label">' . esc_html($this->get_food_symbol_key_label($symbol)) . '</span></li>';
+        }
+
+        $parts[] = '</ul>';
+        $parts[] = '</div>';
+
+        return implode('', $parts);
     }
 
     private function render_single_food_symbol($symbol) {
