@@ -10,10 +10,10 @@
 }
 
 .menuosaur-heading-icon {
+  background: linear-gradient(135deg, rgb(28, 88, 47) 0%, rgb(53, 142, 72) 38%, rgb(129, 190, 78) 62%, rgb(17, 67, 42) 100%);
   display: inline-block;
-  width: 34px;
   height: 34px;
-  background: #2271b1;
+  width: 34px;
   -webkit-mask-image: url("../icon.svg");
   -webkit-mask-position: center;
   -webkit-mask-repeat: no-repeat;
@@ -60,6 +60,23 @@
 .menuosaur-wrap .fa-utensils {
   --fa-primary-color: #8a5a00;
   --fa-secondary-color: #f0ca84;
+}
+
+.menuosaur-wrap .fa-circle-question {
+  --fa-primary-color: #138a5b;
+  --fa-secondary-color: #9ee7be;
+}
+
+.menuosaur-wrap .menuosaur-symbol-key .menuosaur-dietary-symbol {
+  background: #e8f7ed;
+  border-color: #1e8e3e;
+  color: #1e8e3e;
+}
+
+.menuosaur-wrap .menuosaur-symbol-key .menuosaur-allergen-symbol {
+  background: #fff3e6;
+  border-color: #b25a00;
+  color: #8a4300;
 }
 
 .menuosaur-nav-tabs {
