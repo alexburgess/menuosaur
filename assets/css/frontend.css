@@ -21,6 +21,34 @@
   margin: 0;
 }
 
+.menuosaur-item-symbols {
+  align-items: center;
+  display: inline-flex;
+  gap: 0.25em;
+  margin-left: 0.35em;
+  vertical-align: 0.08em;
+}
+
+.menuosaur-menu-symbol {
+  align-items: center;
+  border: 1px solid currentColor;
+  border-radius: 50%;
+  box-sizing: border-box;
+  display: inline-flex;
+  font-size: 0.62em;
+  font-weight: 700;
+  height: 1.65em;
+  justify-content: center;
+  letter-spacing: 0;
+  line-height: 1;
+  text-transform: uppercase;
+  width: 1.65em;
+}
+
+.menuosaur-allergen-symbol {
+  border-style: double;
+}
+
 .menuosaur-item-description,
 .menuosaur-item-attributes,
 .menuosaur-variation-prices {

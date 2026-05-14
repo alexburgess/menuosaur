@@ -2,13 +2,13 @@
 
 Menuosaur is a WordPress plugin for building frontend menu shortcodes from a cached Square catalog.
 
-It reads Square regular categories, items, item variations, prices, descriptions, custom attributes, and selected menu item images. WordPress admins can build named menu shortcodes, choose regular categories, search for individual products, drag selected items into the desired order, and control which parts of each item render on the page.
+It reads Square regular categories, items, item variations, prices, descriptions, dietary preferences, allergens, custom attributes, and selected menu item images. WordPress admins can build named menu shortcodes, choose regular categories, search for individual products, drag selected items into the desired order, and control which parts of each item render on the page.
 
 ## Features
 
 - Square Catalog API sync using WordPress HTTP functions.
 - Manual sync plus hourly WordPress cron refresh.
-- Local catalog cache for categories, items, variations, prices, descriptions, custom attributes, and selected menu image objects.
+- Local catalog cache for categories, items, variations, prices, descriptions, dietary preferences, allergens, custom attributes, and selected menu image objects.
 - Queued WordPress Media Library image caching for Square images.
 - Per-menu image source choices: original Square URL, WordPress thumbnail, WordPress medium, or WordPress large.
 - Multi-category menu shortcodes.
@@ -19,7 +19,7 @@ It reads Square regular categories, items, item variations, prices, descriptions
 - Global option to display cheaper variations first.
 - Global option to remove currency symbols from rendered prices.
 - Configurable WordPress admin sidebar menu label.
-- Per-menu display controls for item name, image, description, prices, and selected custom attributes.
+- Per-menu display controls for item name, dietary/allergen symbols, image, description, prices, and selected custom attributes.
 - Theme-neutral frontend markup for easy styling.
 
 ## Installation
@@ -59,7 +59,7 @@ Common classes:
   <h4 class="menuosaur-category-heading">Category</h4>
   <div class="menuosaur-item">
     <div class="menuosaur-item-image">...</div>
-    <p class="menuosaur-item-name">Item name</p>
+    <p class="menuosaur-item-name">Item name <span class="menuosaur-item-symbols">...</span></p>
     <p class="menuosaur-item-description">Description</p>
     <p class="menuosaur-item-attributes">Attributes</p>
     <p class="menuosaur-variation-prices">Prices</p>

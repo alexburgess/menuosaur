@@ -526,6 +526,7 @@ class Menuosaur_Plugin {
         echo '<label class="menuosaur-checkbox-label"><input type="checkbox" name="display_show_item_image" value="1" ' . checked(!empty($display['show_item_image']), true, false) . ' /> ' . esc_html__('Item image', 'menuosaur') . '</label>';
         echo '<label class="menuosaur-checkbox-label"><input type="checkbox" name="display_show_description" value="1" ' . checked(!empty($display['show_description']), true, false) . ' /> ' . esc_html__('Description', 'menuosaur') . '</label>';
         echo '<label class="menuosaur-checkbox-label"><input type="checkbox" name="display_show_prices" value="1" ' . checked(!empty($display['show_prices']), true, false) . ' /> ' . esc_html__('Prices', 'menuosaur') . '</label>';
+        echo '<label class="menuosaur-checkbox-label"><input type="checkbox" name="display_show_dietary_symbols" value="1" ' . checked(!empty($display['show_dietary_symbols']), true, false) . ' /> ' . esc_html__('Dietary/allergen symbols', 'menuosaur') . '</label>';
         echo '</div>';
         echo '<div class="menuosaur-image-size-field">';
         echo '<label for="menuosaur_display_image_size">' . esc_html__('Image source / size', 'menuosaur') . '</label>';
@@ -974,6 +975,7 @@ class Menuosaur_Plugin {
         $show_item_image = !empty($display['show_item_image']);
         $show_description = !empty($display['show_description']);
         $show_prices = !empty($display['show_prices']);
+        $show_dietary_symbols = !empty($display['show_dietary_symbols']);
         $image_size = $this->sanitize_image_size(isset($display['image_size']) ? $display['image_size'] : 'square_original');
         $selected_attribute_keys = isset($display['custom_attribute_keys']) && is_array($display['custom_attribute_keys'])
             ? $display['custom_attribute_keys']
@@ -1043,6 +1045,7 @@ class Menuosaur_Plugin {
             }
 
             $image = $show_item_image ? $this->get_item_image_data($item, $image_size) : null;
+            $food_symbols = $show_dietary_symbols ? $this->get_item_food_symbols($item) : array();
             $attribute_parts = $this->get_selected_custom_attribute_parts($item, $variation_objects, $selected_attribute_keys, $show_attribute_labels);
             if (!$show_item_name && !$image && (!$show_description || empty($item['description'])) && empty($variation_parts) && empty($attribute_parts)) {
                 continue;
@@ -1060,7 +1063,11 @@ class Menuosaur_Plugin {
                 $parts[] = '<div class="menuosaur-item-image"><img src="' . esc_url($image['url']) . '" alt="' . esc_attr($image['alt'] !== '' ? $image['alt'] : $item['name']) . '" loading="lazy"' . $size_attrs . ' /></div>';
             }
             if ($show_item_name) {
-                $parts[] = '<p class="menuosaur-item-name">' . esc_html($item['name']) . '</p>';
+                $item_name = esc_html($item['name']);
+                if (!empty($food_symbols)) {
+                    $item_name .= ' ' . $this->render_food_symbols($food_symbols);
+                }
+                $parts[] = '<p class="menuosaur-item-name">' . $item_name . '</p>';
             }
             if ($show_description && !empty($item['description'])) {
                 $parts[] = '<p class="menuosaur-item-description">' . esc_html(wp_strip_all_tags($item['description'])) . '</p>';
@@ -1993,6 +2000,163 @@ class Menuosaur_Plugin {
         );
     }
 
+    private function get_item_food_symbols($item) {
+        if (empty($item['raw_json']['item_data']['food_and_beverage_details']) || !is_array($item['raw_json']['item_data']['food_and_beverage_details'])) {
+            return array();
+        }
+
+        $details = $item['raw_json']['item_data']['food_and_beverage_details'];
+        $symbols = array();
+        $seen = array();
+
+        if (!empty($details['dietary_preferences']) && is_array($details['dietary_preferences'])) {
+            foreach ($details['dietary_preferences'] as $preference) {
+                $symbol = $this->normalize_food_symbol($preference, 'dietary');
+                if (!$symbol) {
+                    continue;
+                }
+
+                $fingerprint = $symbol['group'] . ':' . $this->normalize_custom_attribute_part($symbol['label']);
+                if ($fingerprint === ':' || isset($seen[$fingerprint])) {
+                    continue;
+                }
+
+                $seen[$fingerprint] = true;
+                $symbols[] = $symbol;
+            }
+        }
+
+        if (!empty($details['ingredients']) && is_array($details['ingredients'])) {
+            foreach ($details['ingredients'] as $ingredient) {
+                $symbol = $this->normalize_food_symbol($ingredient, 'allergen');
+                if (!$symbol) {
+                    continue;
+                }
+
+                $fingerprint = $symbol['group'] . ':' . $this->normalize_custom_attribute_part($symbol['label']);
+                if ($fingerprint === ':' || isset($seen[$fingerprint])) {
+                    continue;
+                }
+
+                $seen[$fingerprint] = true;
+                $symbols[] = $symbol;
+            }
+        }
+
+        return $symbols;
+    }
+
+    private function normalize_food_symbol($entry, $group) {
+        if (!is_array($entry)) {
+            return null;
+        }
+
+        $standard_name = !empty($entry['standard_name']) ? strtoupper((string) $entry['standard_name']) : '';
+        $custom_name = !empty($entry['custom_name']) ? trim((string) $entry['custom_name']) : '';
+        $map = $group === 'allergen' ? $this->get_allergen_symbol_map() : $this->get_dietary_symbol_map();
+
+        if ($standard_name !== '' && isset($map[$standard_name])) {
+            $label = $map[$standard_name]['label'];
+            $code = $map[$standard_name]['code'];
+            $key = $standard_name;
+        } else {
+            $label = $custom_name !== '' ? $custom_name : $this->humanize_custom_attribute_key($standard_name);
+            $code = $this->build_food_symbol_code($label);
+            $key = $standard_name !== '' ? $standard_name : sanitize_key($label);
+        }
+
+        $label = trim(wp_strip_all_tags((string) $label));
+        $code = trim(wp_strip_all_tags((string) $code));
+        if ($label === '' || $code === '') {
+            return null;
+        }
+
+        return array(
+            'group' => $group === 'allergen' ? 'allergen' : 'dietary',
+            'key' => $key,
+            'code' => $code,
+            'label' => $label,
+        );
+    }
+
+    private function get_dietary_symbol_map() {
+        return array(
+            'DAIRY_FREE' => array('code' => 'DF', 'label' => __('Dairy free', 'menuosaur')),
+            'GLUTEN_FREE' => array('code' => 'GF', 'label' => __('Gluten free', 'menuosaur')),
+            'HALAL' => array('code' => 'H', 'label' => __('Halal', 'menuosaur')),
+            'KOSHER' => array('code' => 'K', 'label' => __('Kosher', 'menuosaur')),
+            'NUT_FREE' => array('code' => 'NF', 'label' => __('Nut free', 'menuosaur')),
+            'VEGAN' => array('code' => 'VG', 'label' => __('Vegan', 'menuosaur')),
+            'VEGETARIAN' => array('code' => 'V', 'label' => __('Vegetarian', 'menuosaur')),
+        );
+    }
+
+    private function get_allergen_symbol_map() {
+        return array(
+            'CELERY' => array('code' => 'Ce', 'label' => __('Celery', 'menuosaur')),
+            'CRUSTACEANS' => array('code' => 'Cr', 'label' => __('Crustaceans', 'menuosaur')),
+            'EGGS' => array('code' => 'E', 'label' => __('Eggs', 'menuosaur')),
+            'FISH' => array('code' => 'F', 'label' => __('Fish', 'menuosaur')),
+            'GLUTEN' => array('code' => 'G', 'label' => __('Gluten', 'menuosaur')),
+            'LUPIN' => array('code' => 'L', 'label' => __('Lupin', 'menuosaur')),
+            'MILK' => array('code' => 'M', 'label' => __('Milk', 'menuosaur')),
+            'MOLLUSCS' => array('code' => 'Mo', 'label' => __('Molluscs', 'menuosaur')),
+            'MUSTARD' => array('code' => 'Mu', 'label' => __('Mustard', 'menuosaur')),
+            'PEANUTS' => array('code' => 'P', 'label' => __('Peanuts', 'menuosaur')),
+            'SESAME' => array('code' => 'Se', 'label' => __('Sesame', 'menuosaur')),
+            'SOY' => array('code' => 'S', 'label' => __('Soy', 'menuosaur')),
+            'SULPHITES' => array('code' => 'Su', 'label' => __('Sulphites', 'menuosaur')),
+            'TREE_NUTS' => array('code' => 'TN', 'label' => __('Tree nuts', 'menuosaur')),
+        );
+    }
+
+    private function build_food_symbol_code($label) {
+        $label = strtoupper(wp_strip_all_tags((string) $label));
+        $parts = preg_split('/[\s_\-\/]+/', $label);
+        $code = '';
+
+        foreach ((array) $parts as $part) {
+            $part = preg_replace('/[^A-Z0-9]/', '', (string) $part);
+            if ($part === '') {
+                continue;
+            }
+            $code .= substr($part, 0, 1);
+            if (strlen($code) >= 2) {
+                break;
+            }
+        }
+
+        if ($code === '') {
+            $code = substr(preg_replace('/[^A-Z0-9]/', '', $label), 0, 2);
+        }
+
+        return $code;
+    }
+
+    private function render_food_symbols($symbols) {
+        if (empty($symbols)) {
+            return '';
+        }
+
+        $html = '<span class="menuosaur-item-symbols" aria-label="' . esc_attr__('Dietary preferences and allergens', 'menuosaur') . '">';
+        foreach ($symbols as $symbol) {
+            $is_allergen = isset($symbol['group']) && $symbol['group'] === 'allergen';
+            $label = isset($symbol['label']) ? (string) $symbol['label'] : '';
+            $title = $is_allergen
+                ? sprintf(__('Contains %s', 'menuosaur'), $label)
+                : $label;
+            $classes = array(
+                'menuosaur-menu-symbol',
+                $is_allergen ? 'menuosaur-allergen-symbol' : 'menuosaur-dietary-symbol',
+            );
+
+            $html .= '<span class="' . esc_attr(implode(' ', $classes)) . '" title="' . esc_attr($title) . '" aria-label="' . esc_attr($title) . '">' . esc_html($symbol['code']) . '</span>';
+        }
+        $html .= '</span>';
+
+        return $html;
+    }
+
     private function get_selected_custom_attribute_parts($item, $variation_objects, $selected_keys, $show_labels) {
         if (empty($selected_keys)) {
             return array();
@@ -2177,6 +2341,7 @@ class Menuosaur_Plugin {
                 'show_item_image' => isset($_POST['display_show_item_image']) ? 1 : 0,
                 'show_description' => isset($_POST['display_show_description']) ? 1 : 0,
                 'show_prices' => isset($_POST['display_show_prices']) ? 1 : 0,
+                'show_dietary_symbols' => isset($_POST['display_show_dietary_symbols']) ? 1 : 0,
                 'image_size' => isset($_POST['display_image_size']) ? $this->sanitize_image_size(wp_unslash($_POST['display_image_size'])) : 'square_original',
                 'custom_attribute_keys' => isset($_POST['display_custom_attribute_keys']) && is_array($_POST['display_custom_attribute_keys'])
                     ? array_values(array_filter(array_map('sanitize_text_field', wp_unslash($_POST['display_custom_attribute_keys']))))
