@@ -16,6 +16,7 @@ It reads Square regular categories, items, item variations, prices, descriptions
 - Drag-and-drop selected item ordering in the admin builder.
 - Custom heading text for menus that include multiple categories.
 - Copy buttons for saved shortcode actions.
+- Symbol key shortcode for dietary/allergen symbols used by menus on the current page.
 - Global option to display cheaper variations first.
 - Global option to remove currency symbols from rendered prices.
 - Configurable WordPress admin sidebar menu label.
@@ -48,6 +49,18 @@ Use the shortcode on a page or post:
 [menuosaur id="your-shortcode-slug"]
 ```
 
+To show a key for the dietary/allergen symbols used by Menuosaur menus on the same page:
+
+```text
+[menuosaur_symbol_key]
+```
+
+You can also target specific menus explicitly:
+
+```text
+[menuosaur_symbol_key ids="wine-red,wine-white-n-rose" title="Dietary Key"]
+```
+
 ## Frontend Markup
 
 Menuosaur keeps the frontend output deliberately light so the theme can handle presentation.
@@ -64,6 +77,7 @@ Common classes:
     <p class="menuosaur-item-attributes">Attributes</p>
     <p class="menuosaur-variation-prices">Prices</p>
   </div>
+  <div class="menuosaur-symbol-key">...</div>
 </div>
 ```
 

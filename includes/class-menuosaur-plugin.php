@@ -21,6 +21,11 @@ class Menuosaur_Plugin {
      */
     private $settings;
 
+    /**
+     * @var array
+     */
+    private $rendered_food_symbols = array();
+
     public static function instance() {
         if (null === self::$instance) {
             self::$instance = new self();
@@ -75,6 +80,8 @@ class Menuosaur_Plugin {
         add_action(Menuosaur_Manager::CRON_HOOK, array($this, 'handle_scheduled_sync'));
         add_action(self::IMAGE_CACHE_CRON_HOOK, array($this, 'handle_image_cache_batch'));
         add_shortcode('menuosaur', array($this, 'render_shortcode'));
+        add_shortcode('menuosaur_symbol_key', array($this, 'render_symbol_key_shortcode'));
+        add_shortcode('menuosaur_key', array($this, 'render_symbol_key_shortcode'));
     }
 
     public function get_manager() {
@@ -1065,6 +1072,7 @@ class Menuosaur_Plugin {
             if ($show_item_name) {
                 $item_name = esc_html($item['name']);
                 if (!empty($food_symbols)) {
+                    $this->remember_rendered_food_symbols($food_symbols);
                     $item_name .= ' ' . $this->render_food_symbols($food_symbols);
                 }
                 $parts[] = '<p class="menuosaur-item-name">' . $item_name . '</p>';
@@ -1081,6 +1089,53 @@ class Menuosaur_Plugin {
             $parts[] = '</div>';
         }
 
+        $parts[] = '</div>';
+
+        return implode('', $parts);
+    }
+
+    public function render_symbol_key_shortcode($atts) {
+        $atts = shortcode_atts(
+            array(
+                'ids' => '',
+                'title' => __('Key', 'menuosaur'),
+                'show_title' => '1',
+            ),
+            $atts,
+            'menuosaur_symbol_key'
+        );
+
+        wp_enqueue_style(
+            'menuosaur-frontend',
+            MENUOSAUR_PLUGIN_URL . 'assets/css/frontend.css',
+            array(),
+            MENUOSAUR_VERSION
+        );
+
+        $symbols = $this->get_rendered_food_symbols();
+        $ids = $this->parse_symbol_key_shortcode_ids($atts['ids']);
+        foreach ($this->collect_page_food_symbols($ids) as $symbol) {
+            $this->add_food_symbol_to_collection($symbols, $symbol);
+        }
+
+        if (empty($symbols)) {
+            return '';
+        }
+
+        $title = trim(wp_strip_all_tags((string) $atts['title']));
+        $show_title = !in_array(strtolower((string) $atts['show_title']), array('0', 'false', 'no', 'off'), true);
+        $parts = array();
+        $parts[] = '<div class="menuosaur-symbol-key">';
+        if ($show_title && $title !== '') {
+            $parts[] = '<h4 class="menuosaur-symbol-key-title">' . esc_html($title) . '</h4>';
+        }
+        $parts[] = '<ul class="menuosaur-symbol-key-list">';
+
+        foreach ($symbols as $symbol) {
+            $parts[] = '<li class="menuosaur-symbol-key-item">' . $this->render_single_food_symbol($symbol) . '<span class="menuosaur-symbol-key-label">' . esc_html($this->get_food_symbol_key_label($symbol)) . '</span></li>';
+        }
+
+        $parts[] = '</ul>';
         $parts[] = '</div>';
 
         return implode('', $parts);
@@ -2046,6 +2101,104 @@ class Menuosaur_Plugin {
         return $symbols;
     }
 
+    private function collect_shortcode_food_symbols($shortcode) {
+        if (!$shortcode || $shortcode['status'] !== 'active') {
+            return array();
+        }
+
+        $config = isset($shortcode['config']) && is_array($shortcode['config']) ? $shortcode['config'] : $this->manager->default_shortcode_config();
+        if (empty($config['item_order']) || !is_array($config['item_order'])) {
+            return array();
+        }
+
+        $display = isset($config['display']) && is_array($config['display'])
+            ? $config['display']
+            : $this->manager->default_shortcode_config()['display'];
+        if (empty($display['show_item_name']) || empty($display['show_dietary_symbols'])) {
+            return array();
+        }
+
+        $symbols = array();
+        foreach ($config['item_order'] as $item_id) {
+            $item = $this->manager->get_catalog_object($item_id);
+            if (!$item || $item['object_type'] !== 'ITEM' || $item['is_deleted'] || $item['is_archived']) {
+                continue;
+            }
+
+            foreach ($this->get_item_food_symbols($item) as $symbol) {
+                $this->add_food_symbol_to_collection($symbols, $symbol);
+            }
+        }
+
+        return $symbols;
+    }
+
+    private function collect_page_food_symbols($ids = array()) {
+        $symbols = array();
+
+        if (empty($ids)) {
+            $ids = $this->get_menuosaur_shortcode_ids_from_current_post();
+        }
+
+        foreach ($ids as $id) {
+            $shortcode = $this->manager->get_shortcode_by_slug($id);
+            foreach ($this->collect_shortcode_food_symbols($shortcode) as $symbol) {
+                $this->add_food_symbol_to_collection($symbols, $symbol);
+            }
+        }
+
+        return $symbols;
+    }
+
+    private function get_menuosaur_shortcode_ids_from_current_post() {
+        global $post;
+
+        if (!$post || empty($post->post_content)) {
+            return array();
+        }
+
+        $content = (string) $post->post_content;
+        if (strpos($content, '[menuosaur') === false) {
+            return array();
+        }
+
+        $ids = array();
+        $pattern = get_shortcode_regex(array('menuosaur'));
+        if (!preg_match_all('/' . $pattern . '/s', $content, $matches, PREG_SET_ORDER)) {
+            return array();
+        }
+
+        foreach ($matches as $match) {
+            if (empty($match[2]) || $match[2] !== 'menuosaur') {
+                continue;
+            }
+
+            $atts = shortcode_parse_atts($match[3]);
+            if (!is_array($atts) || empty($atts['id'])) {
+                continue;
+            }
+
+            $id = sanitize_title((string) $atts['id']);
+            if ($id !== '') {
+                $ids[] = $id;
+            }
+        }
+
+        return array_values(array_unique($ids));
+    }
+
+    private function parse_symbol_key_shortcode_ids($raw_ids) {
+        $ids = array();
+        foreach (preg_split('/[\s,]+/', (string) $raw_ids) as $id) {
+            $id = sanitize_title($id);
+            if ($id !== '') {
+                $ids[] = $id;
+            }
+        }
+
+        return array_values(array_unique($ids));
+    }
+
     private function normalize_food_symbol($entry, $group) {
         if (!is_array($entry)) {
             return null;
@@ -2140,21 +2293,57 @@ class Menuosaur_Plugin {
 
         $html = '<span class="menuosaur-item-symbols" aria-label="' . esc_attr__('Dietary preferences and allergens', 'menuosaur') . '">';
         foreach ($symbols as $symbol) {
-            $is_allergen = isset($symbol['group']) && $symbol['group'] === 'allergen';
-            $label = isset($symbol['label']) ? (string) $symbol['label'] : '';
-            $title = $is_allergen
-                ? sprintf(__('Contains %s', 'menuosaur'), $label)
-                : $label;
-            $classes = array(
-                'menuosaur-menu-symbol',
-                $is_allergen ? 'menuosaur-allergen-symbol' : 'menuosaur-dietary-symbol',
-            );
-
-            $html .= '<span class="' . esc_attr(implode(' ', $classes)) . '" title="' . esc_attr($title) . '" aria-label="' . esc_attr($title) . '">' . esc_html($symbol['code']) . '</span>';
+            $html .= $this->render_single_food_symbol($symbol);
         }
         $html .= '</span>';
 
         return $html;
+    }
+
+    private function render_single_food_symbol($symbol) {
+        $is_allergen = isset($symbol['group']) && $symbol['group'] === 'allergen';
+        $label = isset($symbol['label']) ? (string) $symbol['label'] : '';
+        $title = $this->get_food_symbol_key_label($symbol);
+        $classes = array(
+            'menuosaur-menu-symbol',
+            $is_allergen ? 'menuosaur-allergen-symbol' : 'menuosaur-dietary-symbol',
+        );
+
+        return '<span class="' . esc_attr(implode(' ', $classes)) . '" title="' . esc_attr($title) . '" aria-label="' . esc_attr($title) . '">' . esc_html($symbol['code']) . '</span>';
+    }
+
+    private function get_food_symbol_key_label($symbol) {
+        $is_allergen = isset($symbol['group']) && $symbol['group'] === 'allergen';
+        $label = isset($symbol['label']) ? (string) $symbol['label'] : '';
+
+        return $is_allergen
+            ? sprintf(__('Contains %s', 'menuosaur'), $label)
+            : $label;
+    }
+
+    private function remember_rendered_food_symbols($symbols) {
+        foreach ($symbols as $symbol) {
+            $this->add_food_symbol_to_collection($this->rendered_food_symbols, $symbol);
+        }
+    }
+
+    private function get_rendered_food_symbols() {
+        return $this->rendered_food_symbols;
+    }
+
+    private function add_food_symbol_to_collection(&$collection, $symbol) {
+        if (empty($symbol['code']) || empty($symbol['label'])) {
+            return;
+        }
+
+        $group = isset($symbol['group']) && $symbol['group'] === 'allergen' ? 'allergen' : 'dietary';
+        $key = !empty($symbol['key']) ? (string) $symbol['key'] : (string) $symbol['label'];
+        $collection_key = $group . ':' . sanitize_key($key);
+        if (isset($collection[$collection_key])) {
+            return;
+        }
+
+        $collection[$collection_key] = $symbol;
     }
 
     private function get_selected_custom_attribute_parts($item, $variation_objects, $selected_keys, $show_labels) {
