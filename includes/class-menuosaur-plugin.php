@@ -420,7 +420,12 @@ class Menuosaur_Plugin {
         $config = $shortcode['config'];
         $display = isset($config['display']) && is_array($config['display']) ? $config['display'] : $this->manager->default_shortcode_config()['display'];
         $image_size = $this->sanitize_image_size(isset($display['image_size']) ? $display['image_size'] : 'square_original');
+        $image_aspect_ratio = $this->sanitize_image_aspect_ratio(isset($display['image_aspect_ratio']) ? $display['image_aspect_ratio'] : 'natural');
+        $custom_image_aspect_ratio = $this->sanitize_custom_image_aspect_ratio(isset($display['custom_image_aspect_ratio']) ? $display['custom_image_aspect_ratio'] : '');
         $heading_text = isset($config['heading_text']) ? trim((string) $config['heading_text']) : '';
+        $intro_text = isset($config['intro_text']) ? (string) $config['intro_text'] : '';
+        $total_discount_percent = isset($config['total_discount_percent']) ? $this->sanitize_percentage($config['total_discount_percent']) : 0;
+        $enable_item_quantities = !empty($config['enable_item_quantities']);
         $selected_items = isset($config['item_order']) ? $config['item_order'] : array();
         $selected_item_lookup = array_fill_keys($selected_items, true);
         $items = array();
@@ -484,7 +489,7 @@ class Menuosaur_Plugin {
 
         echo '<div class="menuosaur-card menuosaur-builder-card" id="menuosaur-builder">';
         echo '<h2><i class="fa-duotone fa-list-check" aria-hidden="true"></i> ' . esc_html__('Configure shortcode', 'menuosaur') . '</h2>';
-        echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '" class="menuosaur-builder-form">';
+        echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '" class="menuosaur-builder-form' . ($enable_item_quantities ? ' has-quantities-enabled' : '') . '">';
         wp_nonce_field('menuosaur_save_shortcode_action', 'menuosaur_nonce');
         echo '<input type="hidden" name="action" value="menuosaur_save_shortcode" />';
         echo '<input type="hidden" name="shortcode_id" value="' . esc_attr((string) $shortcode['id']) . '" />';
@@ -531,16 +536,32 @@ class Menuosaur_Plugin {
         echo '</select>';
         echo '<p class="description menuosaur-category-help">' . esc_html__('Only Square regular categories are shown. Select categories to browse their items, or use search below to add products individually.', 'menuosaur') . '</p>';
 
-        $has_multiple_categories = count($selected_category_ids) > 1;
         echo '<div class="menuosaur-heading-options">';
-        echo '<label class="menuosaur-checkbox-label menuosaur-heading-checkbox-row"' . ($has_multiple_categories ? ' hidden' : '') . '><input type="checkbox" name="show_category_heading" value="1" ' . checked($shortcode['show_category_heading'], true, false) . ' /> ' . esc_html__('Show category as a heading', 'menuosaur') . '</label>';
-        echo '<div class="menuosaur-heading-custom-row"' . (!$has_multiple_categories ? ' hidden' : '') . '>';
-        echo '<label for="menuosaur_heading_text"><strong>' . esc_html__('Menu heading', 'menuosaur') . '</strong></label>';
+        echo '<label class="menuosaur-checkbox-label menuosaur-heading-checkbox-row"><input type="checkbox" name="show_category_heading" value="1" ' . checked($shortcode['show_category_heading'], true, false) . ' /> ' . esc_html__('Show menu heading', 'menuosaur') . '</label>';
+        echo '<div class="menuosaur-heading-custom-row">';
+        echo '<label for="menuosaur_heading_text"><strong>' . esc_html__('Custom heading', 'menuosaur') . '</strong></label>';
         echo '<input type="text" name="heading_text" id="menuosaur_heading_text" class="regular-text" value="' . esc_attr($heading_text) . '" placeholder="' . esc_attr__('Sparkling, White & Rosé, December Release...', 'menuosaur') . '" />';
-        echo '<p class="description">' . esc_html__('Used when this shortcode includes multiple categories. Leave blank to render no heading.', 'menuosaur') . '</p>';
+        echo '<p class="description">' . esc_html__('Optional. If filled, this replaces the Square category name. If blank, a one-category menu can use the Square category name.', 'menuosaur') . '</p>';
         echo '</div>';
         echo '</div>';
         echo '<label class="menuosaur-checkbox-label"><input type="checkbox" name="show_variation_labels" value="1" ' . checked($shortcode['show_variation_labels'], true, false) . ' /> ' . esc_html__('Show variation labels before prices', 'menuosaur') . '</label>';
+        echo '</div>';
+
+        echo '<div class="menuosaur-menu-meta-panel">';
+        echo '<h3>' . esc_html__('Text below heading', 'menuosaur') . '</h3>';
+        echo '<div class="menuosaur-menu-meta-grid">';
+        echo '<div>';
+        echo '<label for="menuosaur_intro_text">' . esc_html__('Additional text', 'menuosaur') . '</label>';
+        echo '<textarea name="intro_text" id="menuosaur_intro_text" class="large-text menuosaur-menu-note-field" rows="4" placeholder="' . esc_attr__("September Release\nExpected Cost: {total}", 'menuosaur') . '">' . esc_textarea($intro_text) . '</textarea>';
+        echo '<p class="description">' . esc_html__('Shown under the menu heading. Line breaks are preserved.', 'menuosaur') . '</p>';
+        echo '</div>';
+        echo '<div>';
+        echo '<label for="menuosaur_total_discount_percent">' . esc_html__('Discount for cost placeholders', 'menuosaur') . '</label>';
+        echo '<input type="number" name="total_discount_percent" id="menuosaur_total_discount_percent" class="small-text" min="0" max="100" step="0.01" value="' . esc_attr($this->format_percentage_value($total_discount_percent)) . '" /> <span>' . esc_html__('%', 'menuosaur') . '</span>';
+        echo '<p class="description">' . esc_html__('Applies only to the total placeholders. Use 0 for no discount.', 'menuosaur') . '</p>';
+        echo '<p class="description"><strong>' . esc_html__('Placeholders:', 'menuosaur') . '</strong> <code>{total}</code>, <code>{menu_total}</code>, <code>{subtotal}</code>, <code>{menu_subtotal}</code>, <code>{discount_percent}</code></p>';
+        echo '</div>';
+        echo '</div>';
         echo '</div>';
 
         echo '<div class="menuosaur-display-panel">';
@@ -551,6 +572,7 @@ class Menuosaur_Plugin {
         echo '<label class="menuosaur-checkbox-label"><input type="checkbox" name="display_show_description" value="1" ' . checked(!empty($display['show_description']), true, false) . ' /> ' . esc_html__('Description', 'menuosaur') . '</label>';
         echo '<label class="menuosaur-checkbox-label"><input type="checkbox" name="display_show_prices" value="1" ' . checked(!empty($display['show_prices']), true, false) . ' /> ' . esc_html__('Prices', 'menuosaur') . '</label>';
         echo '<label class="menuosaur-checkbox-label"><input type="checkbox" name="display_show_dietary_symbols" value="1" ' . checked(!empty($display['show_dietary_symbols']), true, false) . ' /> ' . esc_html__('Dietary/allergen symbols', 'menuosaur') . '</label>';
+        echo '<label class="menuosaur-checkbox-label"><input type="checkbox" name="enable_item_quantities" id="menuosaur_enable_item_quantities" value="1" ' . checked($enable_item_quantities, true, false) . ' /> ' . esc_html__('Enable multiple quantities', 'menuosaur') . '</label>';
         echo '</div>';
         echo '<div class="menuosaur-image-size-field">';
         echo '<label for="menuosaur_display_image_size">' . esc_html__('Image source / size', 'menuosaur') . '</label>';
@@ -560,6 +582,19 @@ class Menuosaur_Plugin {
         }
         echo '</select>';
         echo '<p class="description">' . esc_html__('WordPress sizes are cached into the Media Library from Square images during sync or first render.', 'menuosaur') . '</p>';
+        echo '</div>';
+        echo '<div class="menuosaur-image-aspect-field">';
+        echo '<label for="menuosaur_display_image_aspect_ratio">' . esc_html__('Image aspect ratio', 'menuosaur') . '</label>';
+        echo '<select name="display_image_aspect_ratio" id="menuosaur_display_image_aspect_ratio">';
+        foreach ($this->get_image_aspect_ratio_options() as $ratio_value => $ratio_label) {
+            echo '<option value="' . esc_attr($ratio_value) . '"' . selected($image_aspect_ratio, $ratio_value, false) . '>' . esc_html($ratio_label) . '</option>';
+        }
+        echo '</select>';
+        echo '<div class="menuosaur-custom-aspect-row"' . ($image_aspect_ratio !== 'custom' ? ' hidden' : '') . '>';
+        echo '<label for="menuosaur_display_custom_image_aspect_ratio">' . esc_html__('Custom ratio', 'menuosaur') . '</label>';
+        echo '<input type="text" name="display_custom_image_aspect_ratio" id="menuosaur_display_custom_image_aspect_ratio" class="regular-text" value="' . esc_attr($custom_image_aspect_ratio) . '" placeholder="' . esc_attr__('3 / 5, 4:5, 16:9...', 'menuosaur') . '" />';
+        echo '</div>';
+        echo '<p class="description">' . esc_html__('Natural keeps the original image shape. Other ratios crop the image into that frame.', 'menuosaur') . '</p>';
         echo '</div>';
 
         echo '<div class="menuosaur-custom-attributes">';
@@ -638,6 +673,8 @@ class Menuosaur_Plugin {
         $has_saved_variations = isset($config['variations'][$item_id]) && is_array($config['variations'][$item_id]);
         $selected_variations = $has_saved_variations ? $config['variations'][$item_id] : array();
         $selected_variation_lookup = array_fill_keys($selected_variations, true);
+        $item_quantities = isset($config['item_quantities']) && is_array($config['item_quantities']) ? $config['item_quantities'] : array();
+        $quantity = isset($item_quantities[$item_id]) ? max(1, min(999, absint($item_quantities[$item_id]))) : 1;
         $search_parts = array($item['name']);
         foreach ($variations as $variation) {
             $search_parts[] = isset($variation['name']) ? (string) $variation['name'] : '';
@@ -649,6 +686,7 @@ class Menuosaur_Plugin {
         echo '<button type="button" class="menuosaur-drag-handle" aria-label="' . esc_attr__('Drag to reorder item', 'menuosaur') . '"><i class="fa-duotone fa-grip-dots-vertical" aria-hidden="true"></i></button>';
         echo '<input type="checkbox" class="menuosaur-selected-item-input" name="selected_items[]" value="' . esc_attr($item_id) . '" ' . checked($is_selected, true, false) . ' />';
         echo '<strong class="menuosaur-item-title">' . esc_html($item['name']) . '</strong>';
+        echo '<label class="menuosaur-item-quantity-control"><span>' . esc_html__('Qty', 'menuosaur') . '</span><input type="number" class="menuosaur-item-quantity-input" name="item_quantities[' . esc_attr($item_id) . ']" min="1" max="999" step="1" value="' . esc_attr((string) $quantity) . '" ' . disabled(!$is_selected, true, false) . ' /></label>';
         echo '<div class="menuosaur-variation-list">';
         if (empty($variations)) {
             echo '<span class="menuosaur-variation-empty">' . esc_html__('No active variations', 'menuosaur') . '</span>';
@@ -939,9 +977,7 @@ class Menuosaur_Plugin {
         $category_ids = $this->sanitize_category_ids_from_request();
         $category_id = !empty($category_ids) ? $category_ids[0] : '';
         $config = $this->build_shortcode_config_from_request($category_ids);
-        $show_category_heading = count($category_ids) > 1
-            ? trim((string) $config['heading_text']) !== ''
-            : isset($_POST['show_category_heading']);
+        $show_category_heading = isset($_POST['show_category_heading']);
         $this->ensure_shortcode_image_objects($config);
 
         $result = $this->manager->update_shortcode(
@@ -1056,10 +1092,18 @@ class Menuosaur_Plugin {
         $show_prices = !empty($display['show_prices']);
         $show_dietary_symbols = !empty($display['show_dietary_symbols']);
         $image_size = $this->sanitize_image_size(isset($display['image_size']) ? $display['image_size'] : 'square_original');
+        $image_aspect_ratio = $this->sanitize_image_aspect_ratio(isset($display['image_aspect_ratio']) ? $display['image_aspect_ratio'] : 'natural');
+        $custom_image_aspect_ratio = $this->sanitize_custom_image_aspect_ratio(isset($display['custom_image_aspect_ratio']) ? $display['custom_image_aspect_ratio'] : '');
+        if ($image_aspect_ratio === 'custom' && $custom_image_aspect_ratio === '') {
+            $image_aspect_ratio = 'natural';
+        }
         $selected_attribute_keys = isset($display['custom_attribute_keys']) && is_array($display['custom_attribute_keys'])
             ? $display['custom_attribute_keys']
             : array();
         $show_attribute_labels = !empty($display['show_custom_attribute_labels']);
+        $intro_text = isset($config['intro_text']) ? trim((string) $config['intro_text']) : '';
+        $enable_item_quantities = !empty($config['enable_item_quantities']);
+        $item_quantities = isset($config['item_quantities']) && is_array($config['item_quantities']) ? $config['item_quantities'] : array();
 
         wp_enqueue_style(
             'menuosaur-frontend',
@@ -1073,14 +1117,20 @@ class Menuosaur_Plugin {
         $heading_text = isset($config['heading_text']) ? trim((string) $config['heading_text']) : '';
         $parts = array();
 
-        $parts[] = '<div class="menuosaur-menu" data-menuosaur-id="' . esc_attr($shortcode['slug']) . '">';
+        $menu_classes = array(
+            'menuosaur-menu',
+            'menuosaur-image-aspect-' . sanitize_html_class($image_aspect_ratio),
+        );
+        $custom_ratio_attr = $image_aspect_ratio === 'custom' ? ' data-menuosaur-custom-image-aspect-ratio="' . esc_attr($custom_image_aspect_ratio) . '" style="--menuosaur-image-aspect-ratio: ' . esc_attr($custom_image_aspect_ratio) . ';"' : '';
+        $menu_open_index = count($parts);
+        $parts[] = '';
 
         if ($shortcode['show_category_heading']) {
             $category_heading = '';
-            if ($category && empty($category['is_deleted']) && empty($category['is_archived'])) {
-                $category_heading = (string) $category['name'];
-            } elseif (count($selected_category_ids) > 1 && $heading_text !== '') {
+            if ($heading_text !== '') {
                 $category_heading = $heading_text;
+            } elseif ($category && empty($category['is_deleted']) && empty($category['is_archived'])) {
+                $category_heading = (string) $category['name'];
             }
 
             if ($category_heading !== '') {
@@ -1088,11 +1138,17 @@ class Menuosaur_Plugin {
             }
         }
 
+        if ($intro_text !== '') {
+            $parts[] = $this->render_menu_intro_text($this->replace_menu_text_placeholders($intro_text, $config));
+        }
+
+        $rendered_item_count = 0;
         foreach ($config['item_order'] as $item_id) {
             $item = $this->manager->get_catalog_object($item_id);
             if (!$item || $item['object_type'] !== 'ITEM' || $item['is_deleted'] || $item['is_archived']) {
                 continue;
             }
+            $quantity = $enable_item_quantities && isset($item_quantities[$item_id]) ? max(1, min(999, absint($item_quantities[$item_id]))) : 1;
 
             $variation_ids = isset($config['variations'][$item_id]) && is_array($config['variations'][$item_id]) ? $config['variations'][$item_id] : array();
             $variation_objects = array();
@@ -1130,6 +1186,7 @@ class Menuosaur_Plugin {
                 continue;
             }
 
+            $rendered_item_count++;
             $parts[] = '<div class="menuosaur-item">';
             if ($image) {
                 $size_attrs = '';
@@ -1142,7 +1199,11 @@ class Menuosaur_Plugin {
                 $parts[] = '<div class="menuosaur-item-image"><img src="' . esc_url($image['url']) . '" alt="' . esc_attr($image['alt'] !== '' ? $image['alt'] : $item['name']) . '" loading="lazy"' . $size_attrs . ' /></div>';
             }
             if ($show_item_name) {
-                $item_name = esc_html($item['name']);
+                $item_name = '';
+                if ($quantity > 1) {
+                    $item_name .= '<span class="menuosaur-item-quantity">' . esc_html($quantity . '×') . '</span> ';
+                }
+                $item_name .= esc_html($item['name']);
                 if (!empty($food_symbols)) {
                     $this->remember_rendered_food_symbols($food_symbols);
                     $item_name .= ' ' . $this->render_food_symbols($food_symbols);
@@ -1161,6 +1222,8 @@ class Menuosaur_Plugin {
             $parts[] = '</div>';
         }
 
+        $menu_classes[] = 'menuosaur-item-count-' . sanitize_html_class((string) $rendered_item_count);
+        $parts[$menu_open_index] = '<div class="' . esc_attr(implode(' ', $menu_classes)) . '" data-menuosaur-id="' . esc_attr($shortcode['slug']) . '" data-menuosaur-item-count="' . esc_attr((string) $rendered_item_count) . '" data-menuosaur-image-aspect-ratio="' . esc_attr($image_aspect_ratio) . '"' . $custom_ratio_attr . '>';
         $parts[] = '</div>';
 
         return implode('', $parts);
@@ -2066,6 +2129,177 @@ class Menuosaur_Plugin {
         return array_key_exists($size, $this->get_image_size_options()) ? $size : 'square_original';
     }
 
+    private function get_image_aspect_ratio_options() {
+        return array(
+            'natural' => __('Natural image shape', 'menuosaur'),
+            'square' => __('1:1 square', 'menuosaur'),
+            'portrait_4_5' => __('4:5 portrait', 'menuosaur'),
+            'portrait_3_4' => __('3:4 portrait', 'menuosaur'),
+            'portrait_2_3' => __('2:3 tall portrait', 'menuosaur'),
+            'landscape_4_3' => __('4:3 landscape', 'menuosaur'),
+            'landscape_16_9' => __('16:9 landscape', 'menuosaur'),
+            'custom' => __('Custom ratio', 'menuosaur'),
+        );
+    }
+
+    private function sanitize_image_aspect_ratio($ratio) {
+        $ratio = sanitize_key((string) $ratio);
+        return array_key_exists($ratio, $this->get_image_aspect_ratio_options()) ? $ratio : 'natural';
+    }
+
+    private function sanitize_custom_image_aspect_ratio($ratio) {
+        $ratio = trim(sanitize_text_field((string) $ratio));
+        if ($ratio === '') {
+            return '';
+        }
+
+        if (preg_match('/^([1-9][0-9]{0,3})(?:\s*[\/:xX]\s*)([1-9][0-9]{0,3})$/', $ratio, $matches)) {
+            return (int) $matches[1] . ' / ' . (int) $matches[2];
+        }
+
+        return '';
+    }
+
+    private function sanitize_percentage($value) {
+        $value = is_numeric($value) ? (float) $value : 0;
+        return round(max(0, min(100, $value)), 4);
+    }
+
+    private function format_percentage_value($value) {
+        $value = $this->sanitize_percentage($value);
+        if (abs($value - round($value)) < 0.0001) {
+            return (string) (int) round($value);
+        }
+
+        return rtrim(rtrim(number_format($value, 4, '.', ''), '0'), '.');
+    }
+
+    private function render_menu_intro_text($text) {
+        $text = trim(str_replace(array("\r\n", "\r"), "\n", (string) $text));
+        if ($text === '') {
+            return '';
+        }
+
+        $paragraphs = preg_split("/\n\s*\n/", $text);
+        $html = '<div class="menuosaur-menu-note">';
+
+        foreach ((array) $paragraphs as $paragraph) {
+            $paragraph = trim((string) $paragraph);
+            if ($paragraph === '') {
+                continue;
+            }
+
+            $lines = array_map(
+                'esc_html',
+                array_map('trim', explode("\n", $paragraph))
+            );
+            $html .= '<p>' . implode('<br />', $lines) . '</p>';
+        }
+
+        $html .= '</div>';
+
+        return $html;
+    }
+
+    private function replace_menu_text_placeholders($text, $config) {
+        $text = (string) $text;
+        if (trim($text) === '') {
+            return '';
+        }
+
+        $discount_percent = isset($config['total_discount_percent']) ? $this->sanitize_percentage($config['total_discount_percent']) : 0;
+        $subtotal_totals = $this->calculate_shortcode_cost_totals($config);
+        $discounted_totals = $this->apply_discount_to_money_totals($subtotal_totals, $discount_percent);
+        $discount_label = $this->format_percentage_value($discount_percent) . '%';
+
+        return strtr(
+            $text,
+            array(
+                '{total}' => $this->format_money_totals($discounted_totals),
+                '{menu_total}' => $this->format_money_totals($discounted_totals),
+                '{subtotal}' => $this->format_money_totals($subtotal_totals),
+                '{menu_subtotal}' => $this->format_money_totals($subtotal_totals),
+                '{discount_percent}' => $discount_label,
+            )
+        );
+    }
+
+    private function calculate_shortcode_cost_totals($config) {
+        if (empty($config['item_order']) || !is_array($config['item_order'])) {
+            return array();
+        }
+
+        $totals = array();
+        $enable_item_quantities = !empty($config['enable_item_quantities']);
+        $item_quantities = isset($config['item_quantities']) && is_array($config['item_quantities']) ? $config['item_quantities'] : array();
+        foreach ($config['item_order'] as $item_id) {
+            $item = $this->manager->get_catalog_object($item_id);
+            if (!$item || $item['object_type'] !== 'ITEM' || $item['is_deleted'] || $item['is_archived']) {
+                continue;
+            }
+            $quantity = $enable_item_quantities && isset($item_quantities[$item_id]) ? max(1, min(999, absint($item_quantities[$item_id]))) : 1;
+
+            $variation_ids = isset($config['variations'][$item_id]) && is_array($config['variations'][$item_id]) ? $config['variations'][$item_id] : array();
+            foreach ($variation_ids as $variation_id) {
+                $variation = $this->manager->get_catalog_object($variation_id);
+                if (!$variation || $variation['object_type'] !== 'ITEM_VARIATION' || $variation['is_deleted'] || $variation['is_archived']) {
+                    continue;
+                }
+
+                if ($variation['price_amount'] === null || $variation['price_amount'] === '') {
+                    continue;
+                }
+
+                $currency = !empty($variation['currency']) ? strtoupper((string) $variation['currency']) : '';
+                if (!isset($totals[$currency])) {
+                    $totals[$currency] = 0;
+                }
+
+                $totals[$currency] += (int) $variation['price_amount'] * $quantity;
+            }
+        }
+
+        ksort($totals);
+
+        return $totals;
+    }
+
+    private function apply_discount_to_money_totals($totals, $discount_percent) {
+        $discount_percent = $this->sanitize_percentage($discount_percent);
+        if ($discount_percent <= 0 || empty($totals)) {
+            return $totals;
+        }
+
+        $multiplier = max(0, 1 - ($discount_percent / 100));
+        $discounted = array();
+        foreach ($totals as $currency => $amount) {
+            $discounted[$currency] = (int) round(((int) $amount) * $multiplier);
+        }
+
+        return $discounted;
+    }
+
+    private function format_money_totals($totals) {
+        if (empty($totals)) {
+            return '';
+        }
+
+        $parts = array();
+        foreach ($totals as $currency => $amount) {
+            $parts[] = $this->format_square_money($amount, $currency);
+        }
+
+        return implode(
+            ' / ',
+            array_filter(
+                $parts,
+                function ($part) {
+                    return $part !== '';
+                }
+            )
+        );
+    }
+
     private function get_available_custom_attribute_options() {
         $options = array();
         $items = $this->manager->get_all_items();
@@ -2616,10 +2850,15 @@ class Menuosaur_Plugin {
 
         $posted_variations = isset($_POST['selected_variations']) && is_array($_POST['selected_variations']) ? wp_unslash($_POST['selected_variations']) : array();
         $variation_order = isset($_POST['variation_order']) && is_array($_POST['variation_order']) ? wp_unslash($_POST['variation_order']) : array();
+        $posted_quantities = isset($_POST['item_quantities']) && is_array($_POST['item_quantities']) ? wp_unslash($_POST['item_quantities']) : array();
         $config = array(
             'item_order' => $selected_items,
             'variations' => array(),
+            'enable_item_quantities' => isset($_POST['enable_item_quantities']) ? 1 : 0,
+            'item_quantities' => array(),
             'heading_text' => isset($_POST['heading_text']) ? trim(sanitize_text_field(wp_unslash($_POST['heading_text']))) : '',
+            'intro_text' => isset($_POST['intro_text']) ? trim(sanitize_textarea_field(wp_unslash($_POST['intro_text']))) : '',
+            'total_discount_percent' => isset($_POST['total_discount_percent']) ? $this->sanitize_percentage(wp_unslash($_POST['total_discount_percent'])) : 0,
             'display' => array(
                 'show_item_name' => isset($_POST['display_show_item_name']) ? 1 : 0,
                 'show_item_image' => isset($_POST['display_show_item_image']) ? 1 : 0,
@@ -2627,6 +2866,8 @@ class Menuosaur_Plugin {
                 'show_prices' => isset($_POST['display_show_prices']) ? 1 : 0,
                 'show_dietary_symbols' => isset($_POST['display_show_dietary_symbols']) ? 1 : 0,
                 'image_size' => isset($_POST['display_image_size']) ? $this->sanitize_image_size(wp_unslash($_POST['display_image_size'])) : 'square_original',
+                'image_aspect_ratio' => isset($_POST['display_image_aspect_ratio']) ? $this->sanitize_image_aspect_ratio(wp_unslash($_POST['display_image_aspect_ratio'])) : 'natural',
+                'custom_image_aspect_ratio' => isset($_POST['display_custom_image_aspect_ratio']) ? $this->sanitize_custom_image_aspect_ratio(wp_unslash($_POST['display_custom_image_aspect_ratio'])) : '',
                 'custom_attribute_keys' => isset($_POST['display_custom_attribute_keys']) && is_array($_POST['display_custom_attribute_keys'])
                     ? array_values(array_filter(array_map('sanitize_text_field', wp_unslash($_POST['display_custom_attribute_keys']))))
                     : array(),
@@ -2636,6 +2877,11 @@ class Menuosaur_Plugin {
         );
 
         foreach ($selected_items as $item_id) {
+            $quantity = isset($posted_quantities[$item_id]) ? absint($posted_quantities[$item_id]) : 1;
+            if ($quantity > 1) {
+                $config['item_quantities'][$item_id] = min(999, $quantity);
+            }
+
             $valid_variations = $this->manager->get_variations_by_item($item_id);
             $valid_lookup = array();
             foreach ($valid_variations as $variation) {

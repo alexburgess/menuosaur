@@ -22,8 +22,9 @@
     var placeholder = form.querySelector('.menuosaur-picker-placeholder');
     var empty = form.querySelector('.menuosaur-picker-empty');
     var selectedEmpty = form.querySelector('.menuosaur-selected-empty');
-    var headingCheckboxRow = form.querySelector('.menuosaur-heading-checkbox-row');
-    var headingCustomRow = form.querySelector('.menuosaur-heading-custom-row');
+    var aspectRatioSelect = form.querySelector('#menuosaur_display_image_aspect_ratio');
+    var customAspectRow = form.querySelector('.menuosaur-custom-aspect-row');
+    var quantityToggle = form.querySelector('#menuosaur_enable_item_quantities');
 
     if (!categorySelect || !selectedList || !availableList) {
       return;
@@ -53,6 +54,7 @@
     function setCardInputs(card, selected) {
       var selectedInput = card.querySelector('.menuosaur-selected-item-input');
       var orderInput = card.querySelector('.menuosaur-item-order-input');
+      var quantityInput = card.querySelector('.menuosaur-item-quantity-input');
       var variationInputs = card.querySelectorAll('.menuosaur-variation-list input');
 
       if (selectedInput) {
@@ -62,6 +64,10 @@
 
       if (orderInput) {
         orderInput.disabled = !selected;
+      }
+
+      if (quantityInput) {
+        quantityInput.disabled = !selected;
       }
 
       variationInputs.forEach(function (input) {
@@ -91,6 +97,10 @@
       if (selectedEmpty) {
         selectedEmpty.hidden = selectedList.querySelectorAll('.menuosaur-item-card').length > 0;
       }
+    }
+
+    function syncQuantityControls() {
+      form.classList.toggle('has-quantities-enabled', !!(quantityToggle && quantityToggle.checked));
     }
 
     function moveCard(card, selected) {
@@ -139,16 +149,6 @@
 
       if (empty) {
         empty.hidden = (query === '' && selectedCategoryIds.length === 0) || visibleCount > 0;
-      }
-    }
-
-    function syncHeadingOptions() {
-      var hasMultipleCategories = getSelectedCategoryIds().length > 1;
-      if (headingCheckboxRow) {
-        headingCheckboxRow.hidden = hasMultipleCategories;
-      }
-      if (headingCustomRow) {
-        headingCustomRow.hidden = !hasMultipleCategories;
       }
     }
 
@@ -228,12 +228,18 @@
       }
     });
 
-    categorySelect.addEventListener('change', function () {
-      syncVisibleItems();
-      syncHeadingOptions();
-    });
+    categorySelect.addEventListener('change', syncVisibleItems);
     if (searchInput) {
       searchInput.addEventListener('input', syncVisibleItems);
+    }
+    if (aspectRatioSelect && customAspectRow) {
+      aspectRatioSelect.addEventListener('change', function () {
+        customAspectRow.hidden = aspectRatioSelect.value !== 'custom';
+      });
+      customAspectRow.hidden = aspectRatioSelect.value !== 'custom';
+    }
+    if (quantityToggle) {
+      quantityToggle.addEventListener('change', syncQuantityControls);
     }
 
     form.addEventListener('submit', function () {
@@ -246,8 +252,8 @@
     initSelectedSortable();
     updateSelectedOrder();
     syncSelectedEmpty();
+    syncQuantityControls();
     syncVisibleItems();
-    syncHeadingOptions();
   }
 
   function fallbackCopyText(text) {

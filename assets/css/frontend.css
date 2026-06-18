@@ -6,8 +6,49 @@
   margin: 0 0 1rem;
 }
 
+.menuosaur-menu-note {
+  flex: 0 0 100%;
+  margin: 0 0 1.5rem;
+  width: 100%;
+}
+
+.menuosaur-menu-note p {
+  margin: 0 0 0.35rem;
+}
+
 .menuosaur-item {
   margin: 0 0 1.25rem;
+}
+
+.menuosaur-menu[data-menuosaur-image-aspect-ratio="square"] {
+  --menuosaur-image-aspect-ratio: 1 / 1;
+}
+
+.menuosaur-menu[data-menuosaur-image-aspect-ratio="portrait_4_5"] {
+  --menuosaur-image-aspect-ratio: 4 / 5;
+}
+
+.menuosaur-menu[data-menuosaur-image-aspect-ratio="portrait_3_4"] {
+  --menuosaur-image-aspect-ratio: 3 / 4;
+}
+
+.menuosaur-menu[data-menuosaur-image-aspect-ratio="portrait_2_3"] {
+  --menuosaur-image-aspect-ratio: 2 / 3;
+}
+
+.menuosaur-menu[data-menuosaur-image-aspect-ratio="landscape_4_3"] {
+  --menuosaur-image-aspect-ratio: 4 / 3;
+}
+
+.menuosaur-menu[data-menuosaur-image-aspect-ratio="landscape_16_9"] {
+  --menuosaur-image-aspect-ratio: 16 / 9;
+}
+
+.menuosaur-menu:not([data-menuosaur-image-aspect-ratio="natural"]) .menuosaur-item-image {
+  aspect-ratio: var(--menuosaur-image-aspect-ratio);
+  display: block;
+  overflow: hidden;
+  width: 100%;
 }
 
 .menuosaur-item-image img {
@@ -16,9 +57,22 @@
   max-width: 100%;
 }
 
+.menuosaur-menu:not([data-menuosaur-image-aspect-ratio="natural"]) .menuosaur-item-image img {
+  height: 100%;
+  max-height: none;
+  object-fit: cover;
+  object-position: center center;
+  width: 100%;
+}
+
 .menuosaur-item-name {
   font-weight: 600;
   margin: 0;
+}
+
+.menuosaur-item-quantity {
+  display: inline-block;
+  margin-right: 0.2em;
 }
 
 .menuosaur-item-symbols {

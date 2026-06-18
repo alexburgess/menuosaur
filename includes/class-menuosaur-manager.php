@@ -530,7 +530,11 @@ class Menuosaur_Manager {
         return array(
             'item_order' => array(),
             'variations' => array(),
+            'enable_item_quantities' => 0,
+            'item_quantities' => array(),
             'heading_text' => '',
+            'intro_text' => '',
+            'total_discount_percent' => 0,
             'display' => array(
                 'show_item_name' => 1,
                 'show_item_image' => 0,
@@ -538,6 +542,8 @@ class Menuosaur_Manager {
                 'show_prices' => 1,
                 'show_dietary_symbols' => 1,
                 'image_size' => 'square_original',
+                'image_aspect_ratio' => 'natural',
+                'custom_image_aspect_ratio' => '',
                 'custom_attribute_keys' => array(),
                 'show_custom_attribute_labels' => 0,
             ),
@@ -577,8 +583,31 @@ class Menuosaur_Manager {
             }
         }
 
+        $normalized['enable_item_quantities'] = !empty($config['enable_item_quantities']) ? 1 : 0;
+
+        if (isset($config['item_quantities']) && is_array($config['item_quantities'])) {
+            foreach ($config['item_quantities'] as $item_id => $quantity) {
+                $item_id = sanitize_text_field((string) $item_id);
+                $quantity = absint($quantity);
+                if ($item_id === '' || $quantity < 2) {
+                    continue;
+                }
+
+                $normalized['item_quantities'][$item_id] = min(999, $quantity);
+            }
+        }
+
         if (isset($config['heading_text'])) {
             $normalized['heading_text'] = trim(sanitize_text_field((string) $config['heading_text']));
+        }
+
+        if (isset($config['intro_text'])) {
+            $normalized['intro_text'] = trim(sanitize_textarea_field((string) $config['intro_text']));
+        }
+
+        if (isset($config['total_discount_percent'])) {
+            $discount_percent = is_numeric($config['total_discount_percent']) ? (float) $config['total_discount_percent'] : 0;
+            $normalized['total_discount_percent'] = round(max(0, min(100, $discount_percent)), 4);
         }
 
         if (isset($config['display']) && is_array($config['display'])) {
@@ -593,6 +622,18 @@ class Menuosaur_Manager {
             $normalized['display']['show_custom_attribute_labels'] = !empty($display['show_custom_attribute_labels']) ? 1 : 0;
             if (isset($display['image_size']) && in_array($display['image_size'], array('square_original', 'thumbnail', 'medium', 'large'), true)) {
                 $normalized['display']['image_size'] = $display['image_size'];
+            }
+
+            if (isset($display['image_aspect_ratio']) && in_array($display['image_aspect_ratio'], array('natural', 'square', 'portrait_4_5', 'portrait_3_4', 'portrait_2_3', 'landscape_4_3', 'landscape_16_9', 'custom'), true)) {
+                $normalized['display']['image_aspect_ratio'] = $display['image_aspect_ratio'];
+            }
+
+            if (isset($display['custom_image_aspect_ratio'])) {
+                $normalized['display']['custom_image_aspect_ratio'] = $this->sanitize_aspect_ratio_value($display['custom_image_aspect_ratio']);
+            }
+
+            if ($normalized['display']['image_aspect_ratio'] === 'custom' && $normalized['display']['custom_image_aspect_ratio'] === '') {
+                $normalized['display']['image_aspect_ratio'] = 'natural';
             }
 
             if (isset($display['custom_attribute_keys']) && is_array($display['custom_attribute_keys'])) {
@@ -700,5 +741,18 @@ class Menuosaur_Manager {
         }
 
         return strtolower($value);
+    }
+
+    private function sanitize_aspect_ratio_value($value) {
+        $value = trim(sanitize_text_field((string) $value));
+        if ($value === '') {
+            return '';
+        }
+
+        if (preg_match('/^([1-9][0-9]{0,3})(?:\s*[\/:xX]\s*)([1-9][0-9]{0,3})$/', $value, $matches)) {
+            return (int) $matches[1] . ' / ' . (int) $matches[2];
+        }
+
+        return '';
     }
 }
