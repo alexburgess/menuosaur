@@ -316,7 +316,7 @@ class Menuosaur_Manager {
                     : wp_json_encode(array()),
                 'item_id' => isset($object['item_id']) ? sanitize_text_field((string) $object['item_id']) : '',
                 'category_type' => isset($object['category_type']) ? sanitize_text_field((string) $object['category_type']) : '',
-                'description' => isset($object['description']) ? wp_kses_post((string) $object['description']) : '',
+                'description' => isset($object['description']) ? $this->sanitize_catalog_description((string) $object['description']) : '',
                 'price_amount' => isset($object['price_amount']) && $object['price_amount'] !== null ? (int) $object['price_amount'] : null,
                 'currency' => isset($object['currency']) ? sanitize_text_field((string) $object['currency']) : '',
                 'is_deleted' => !empty($object['is_deleted']) ? 1 : 0,
@@ -535,6 +535,7 @@ class Menuosaur_Manager {
             'heading_text' => '',
             'intro_text' => '',
             'total_discount_percent' => 0,
+            'total_tax_percent' => 0,
             'display' => array(
                 'show_item_name' => 1,
                 'show_item_image' => 0,
@@ -608,6 +609,11 @@ class Menuosaur_Manager {
         if (isset($config['total_discount_percent'])) {
             $discount_percent = is_numeric($config['total_discount_percent']) ? (float) $config['total_discount_percent'] : 0;
             $normalized['total_discount_percent'] = round(max(0, min(100, $discount_percent)), 4);
+        }
+
+        if (isset($config['total_tax_percent'])) {
+            $tax_percent = is_numeric($config['total_tax_percent']) ? (float) $config['total_tax_percent'] : 0;
+            $normalized['total_tax_percent'] = round(max(0, min(100, $tax_percent)), 4);
         }
 
         if (isset($config['display']) && is_array($config['display'])) {
@@ -732,6 +738,39 @@ class Menuosaur_Manager {
         $row['raw_json'] = is_array($raw) ? $raw : array();
 
         return $row;
+    }
+
+    private function sanitize_catalog_description($description) {
+        return wp_kses((string) $description, $this->get_catalog_description_allowed_html());
+    }
+
+    private function get_catalog_description_allowed_html() {
+        return array(
+            'a' => array(
+                'href' => true,
+                'rel' => true,
+                'target' => true,
+                'title' => true,
+            ),
+            'b' => array(),
+            'br' => array(),
+            'code' => array(),
+            'div' => array(),
+            'em' => array(),
+            'h1' => array(),
+            'h2' => array(),
+            'h3' => array(),
+            'h4' => array(),
+            'h5' => array(),
+            'h6' => array(),
+            'i' => array(),
+            'li' => array(),
+            'ol' => array(),
+            'p' => array(),
+            'strong' => array(),
+            'u' => array(),
+            'ul' => array(),
+        );
     }
 
     private function normalize_text($value) {

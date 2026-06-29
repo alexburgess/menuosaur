@@ -8,7 +8,7 @@ It reads Square regular categories, items, item variations, prices, descriptions
 
 - Square Catalog API sync using WordPress HTTP functions.
 - Manual sync plus hourly WordPress cron refresh.
-- Local catalog cache for categories, items, variations, prices, descriptions, dietary preferences, allergens, custom attributes, and selected menu image objects.
+- Local catalog cache for categories, items, variations, prices, formatted descriptions, dietary preferences, allergens, custom attributes, and selected menu image objects.
 - Queued WordPress Media Library image caching for Square images.
 - Per-menu image source choices: original Square URL, WordPress thumbnail, WordPress medium, or WordPress large.
 - Per-menu image aspect-ratio choices that crop Square images into stable frames, including custom ratios.
@@ -16,14 +16,14 @@ It reads Square regular categories, items, item variations, prices, descriptions
 - Regular-category browsing plus direct product search for adding individual items.
 - Drag-and-drop selected item ordering in the admin builder.
 - Optional custom heading text for any menu.
-- Optional text below the menu heading, with total-cost placeholders and a percentage discount for bundles.
+- Optional text below the menu heading, with total-cost placeholders, a percentage discount for bundles, and a tax rate applied after discount.
 - Optional per-item quantities, rendered before item names and included in total-cost placeholders.
 - Copy buttons for saved shortcode actions.
 - Symbol key shortcode for dietary/allergen symbols used by menus on the current page.
 - Global option to display cheaper variations first.
 - Global option to remove currency symbols from rendered prices.
 - Configurable WordPress admin sidebar menu label.
-- Per-menu display controls for item name, dietary/allergen symbols, image, description, prices, and selected custom attributes.
+- Per-menu display controls for item name, dietary/allergen symbols, image, formatted description, prices, and selected custom attributes.
 - Theme-neutral frontend markup for easy styling.
 
 ## Installation
@@ -41,7 +41,7 @@ It reads Square regular categories, items, item variations, prices, descriptions
 2. Create a shortcode and give it a name.
 3. Select one or more Square categories.
 4. Choose whether to show a heading. Add custom heading text if you want to override the Square category name.
-5. Add optional text below the heading. Use `{total}` or `{menu_total}` to show the selected-variation total after discount, and `{subtotal}` or `{menu_subtotal}` to show the pre-discount total.
+5. Add optional text below the heading. Use `{total}` or `{menu_total}` to show the selected-variation total after discount and tax, and `{subtotal}` or `{menu_subtotal}` to show the pre-discount, pre-tax total.
 6. Select the items to include.
 7. Select the variations for each item.
 8. Configure the displayed content, item quantities, and image aspect ratio.
@@ -86,7 +86,7 @@ Common classes:
   <div class="menuosaur-item">
     <div class="menuosaur-item-image">...</div>
     <p class="menuosaur-item-name"><span class="menuosaur-item-quantity">4×</span> Item name <span class="menuosaur-item-symbols">...</span></p>
-    <p class="menuosaur-item-description">Description</p>
+    <div class="menuosaur-item-description">Description</div>
     <p class="menuosaur-item-attributes">Attributes</p>
     <p class="menuosaur-variation-prices">Prices</p>
   </div>

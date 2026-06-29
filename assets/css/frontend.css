@@ -138,6 +138,15 @@
   margin: 0.25rem 0 0;
 }
 
+.menuosaur-item-description > * {
+  margin: 0;
+}
+
+.menuosaur-item-description ul,
+.menuosaur-item-description ol {
+  padding-left: 1.25rem;
+}
+
 .menuosaur-price-separator,
 .menuosaur-attribute-separator {
   display: inline-block;

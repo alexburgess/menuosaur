@@ -425,6 +425,7 @@ class Menuosaur_Plugin {
         $heading_text = isset($config['heading_text']) ? trim((string) $config['heading_text']) : '';
         $intro_text = isset($config['intro_text']) ? (string) $config['intro_text'] : '';
         $total_discount_percent = isset($config['total_discount_percent']) ? $this->sanitize_percentage($config['total_discount_percent']) : 0;
+        $total_tax_percent = isset($config['total_tax_percent']) ? $this->sanitize_percentage($config['total_tax_percent']) : 0;
         $enable_item_quantities = !empty($config['enable_item_quantities']);
         $selected_items = isset($config['item_order']) ? $config['item_order'] : array();
         $selected_item_lookup = array_fill_keys($selected_items, true);
@@ -558,8 +559,11 @@ class Menuosaur_Plugin {
         echo '<div>';
         echo '<label for="menuosaur_total_discount_percent">' . esc_html__('Discount for cost placeholders', 'menuosaur') . '</label>';
         echo '<input type="number" name="total_discount_percent" id="menuosaur_total_discount_percent" class="small-text" min="0" max="100" step="0.01" value="' . esc_attr($this->format_percentage_value($total_discount_percent)) . '" /> <span>' . esc_html__('%', 'menuosaur') . '</span>';
-        echo '<p class="description">' . esc_html__('Applies only to the total placeholders. Use 0 for no discount.', 'menuosaur') . '</p>';
-        echo '<p class="description"><strong>' . esc_html__('Placeholders:', 'menuosaur') . '</strong> <code>{total}</code>, <code>{menu_total}</code>, <code>{subtotal}</code>, <code>{menu_subtotal}</code>, <code>{discount_percent}</code></p>';
+        echo '<p class="description">' . esc_html__('Applies before tax to the total placeholders. Use 0 for no discount.', 'menuosaur') . '</p>';
+        echo '<label for="menuosaur_total_tax_percent">' . esc_html__('Tax for cost placeholders', 'menuosaur') . '</label>';
+        echo '<input type="number" name="total_tax_percent" id="menuosaur_total_tax_percent" class="small-text" min="0" max="100" step="0.01" value="' . esc_attr($this->format_percentage_value($total_tax_percent)) . '" /> <span>' . esc_html__('%', 'menuosaur') . '</span>';
+        echo '<p class="description">' . esc_html__('Applied after the discount to the total placeholders. Use 0 for no tax.', 'menuosaur') . '</p>';
+        echo '<p class="description"><strong>' . esc_html__('Placeholders:', 'menuosaur') . '</strong> <code>{total}</code>, <code>{menu_total}</code>, <code>{subtotal}</code>, <code>{menu_subtotal}</code>, <code>{discount_percent}</code>, <code>{tax_percent}</code></p>';
         echo '</div>';
         echo '</div>';
         echo '</div>';
@@ -1182,7 +1186,9 @@ class Menuosaur_Plugin {
             $image = $show_item_image ? $this->get_item_image_data($item, $image_size) : null;
             $food_symbols = $show_dietary_symbols ? $this->get_item_food_symbols($item) : array();
             $attribute_parts = $this->get_selected_custom_attribute_parts($item, $variation_objects, $selected_attribute_keys, $show_attribute_labels);
-            if (!$show_item_name && !$image && (!$show_description || empty($item['description'])) && empty($variation_parts) && empty($attribute_parts)) {
+            $description = $show_description ? $this->get_item_description_for_render($item) : '';
+            $description_html = $description !== '' ? $this->render_item_description($description) : '';
+            if (!$show_item_name && !$image && $description_html === '' && empty($variation_parts) && empty($attribute_parts)) {
                 continue;
             }
 
@@ -1210,8 +1216,8 @@ class Menuosaur_Plugin {
                 }
                 $parts[] = '<p class="menuosaur-item-name">' . $item_name . '</p>';
             }
-            if ($show_description && !empty($item['description'])) {
-                $parts[] = '<p class="menuosaur-item-description">' . esc_html(wp_strip_all_tags($item['description'])) . '</p>';
+            if ($description_html !== '') {
+                $parts[] = $description_html;
             }
             if (!empty($attribute_parts)) {
                 $parts[] = '<p class="menuosaur-item-attributes">' . implode(' <span class="menuosaur-attribute-separator">|</span> ', $attribute_parts) . '</p>';
@@ -1626,10 +1632,15 @@ class Menuosaur_Plugin {
         }
 
         $category_ids = $this->extract_square_item_category_ids($data);
-        $description = isset($data['description']) ? (string) $data['description'] : '';
-        if ($description === '' && !empty($data['description_html'])) {
-            $description = wp_strip_all_tags((string) $data['description_html']);
+        $description = '';
+        if (!empty($data['description_html'])) {
+            $description = (string) $data['description_html'];
+        } elseif (!empty($data['description'])) {
+            $description = (string) $data['description'];
+        } elseif (!empty($data['description_plaintext'])) {
+            $description = (string) $data['description_plaintext'];
         }
+
         $objects = array(
             array(
                 'object_id' => $item_id,
@@ -2201,6 +2212,84 @@ class Menuosaur_Plugin {
         return $html;
     }
 
+    private function render_item_description($description) {
+        $description = trim(str_replace(array("\r\n", "\r"), "\n", (string) $description));
+        if ($description === '') {
+            return '';
+        }
+
+        if ($description !== wp_strip_all_tags($description)) {
+            $description = trim(wp_kses($description, $this->get_item_description_allowed_html()));
+            return $description !== '' ? '<div class="menuosaur-item-description">' . $description . '</div>' : '';
+        }
+
+        $paragraphs = preg_split("/\n\s*\n/", $description);
+        $html = '<div class="menuosaur-item-description">';
+
+        foreach ((array) $paragraphs as $paragraph) {
+            $paragraph = trim((string) $paragraph);
+            if ($paragraph === '') {
+                continue;
+            }
+
+            $lines = array_map(
+                'esc_html',
+                array_map('trim', explode("\n", $paragraph))
+            );
+            $html .= '<p>' . implode('<br />', $lines) . '</p>';
+        }
+
+        $html .= '</div>';
+
+        return $html;
+    }
+
+    private function get_item_description_for_render($item) {
+        if (!empty($item['raw_json']['item_data']) && is_array($item['raw_json']['item_data'])) {
+            $data = $item['raw_json']['item_data'];
+            if (!empty($data['description_html'])) {
+                return (string) $data['description_html'];
+            }
+            if (!empty($data['description'])) {
+                return (string) $data['description'];
+            }
+            if (!empty($data['description_plaintext'])) {
+                return (string) $data['description_plaintext'];
+            }
+        }
+
+        return !empty($item['description']) ? (string) $item['description'] : '';
+    }
+
+    private function get_item_description_allowed_html() {
+        return array(
+            'a' => array(
+                'href' => true,
+                'rel' => true,
+                'target' => true,
+                'title' => true,
+            ),
+            'b' => array(),
+            'br' => array(),
+            'code' => array(),
+            'div' => array(),
+            'em' => array(),
+            'h1' => array(),
+            'h2' => array(),
+            'h3' => array(),
+            'h4' => array(),
+            'h5' => array(),
+            'h6' => array(),
+            'i' => array(),
+            'li' => array(),
+            'ol' => array(),
+            'p' => array(),
+            'strong' => array(),
+            'u' => array(),
+            'ul' => array(),
+        );
+    }
+
     private function replace_menu_text_placeholders($text, $config) {
         $text = (string) $text;
         if (trim($text) === '') {
@@ -2208,18 +2297,22 @@ class Menuosaur_Plugin {
         }
 
         $discount_percent = isset($config['total_discount_percent']) ? $this->sanitize_percentage($config['total_discount_percent']) : 0;
+        $tax_percent = isset($config['total_tax_percent']) ? $this->sanitize_percentage($config['total_tax_percent']) : 0;
         $subtotal_totals = $this->calculate_shortcode_cost_totals($config);
         $discounted_totals = $this->apply_discount_to_money_totals($subtotal_totals, $discount_percent);
+        $total_totals = $this->apply_tax_to_money_totals($discounted_totals, $tax_percent);
         $discount_label = $this->format_percentage_value($discount_percent) . '%';
+        $tax_label = $this->format_percentage_value($tax_percent) . '%';
 
         return strtr(
             $text,
             array(
-                '{total}' => $this->format_money_totals($discounted_totals),
-                '{menu_total}' => $this->format_money_totals($discounted_totals),
+                '{total}' => $this->format_money_totals($total_totals),
+                '{menu_total}' => $this->format_money_totals($total_totals),
                 '{subtotal}' => $this->format_money_totals($subtotal_totals),
                 '{menu_subtotal}' => $this->format_money_totals($subtotal_totals),
                 '{discount_percent}' => $discount_label,
+                '{tax_percent}' => $tax_label,
             )
         );
     }
@@ -2277,6 +2370,21 @@ class Menuosaur_Plugin {
         }
 
         return $discounted;
+    }
+
+    private function apply_tax_to_money_totals($totals, $tax_percent) {
+        $tax_percent = $this->sanitize_percentage($tax_percent);
+        if ($tax_percent <= 0 || empty($totals)) {
+            return $totals;
+        }
+
+        $multiplier = 1 + ($tax_percent / 100);
+        $taxed = array();
+        foreach ($totals as $currency => $amount) {
+            $taxed[$currency] = (int) round(((int) $amount) * $multiplier);
+        }
+
+        return $taxed;
     }
 
     private function format_money_totals($totals) {
@@ -2546,7 +2654,7 @@ class Menuosaur_Plugin {
             'KOSHER' => array('code' => 'K', 'label' => __('Kosher', 'menuosaur')),
             'NUT_FREE' => array('code' => 'NF', 'label' => __('Nut free', 'menuosaur')),
             'VEGAN' => array('code' => 'VG', 'label' => __('Vegan', 'menuosaur')),
-            'VEGETARIAN' => array('code' => 'V', 'label' => __('Vegetarian', 'menuosaur')),
+            'VEGETARIAN' => array('code' => 'VE', 'label' => __('Vegetarian', 'menuosaur')),
         );
     }
 
@@ -2565,7 +2673,7 @@ class Menuosaur_Plugin {
             'SESAME' => array('code' => 'Se', 'label' => __('Sesame', 'menuosaur')),
             'SOY' => array('code' => 'S', 'label' => __('Soy', 'menuosaur')),
             'SULPHITES' => array('code' => 'Su', 'label' => __('Sulphites', 'menuosaur')),
-            'TREE_NUTS' => array('code' => 'TN', 'label' => __('Tree nuts', 'menuosaur')),
+            'TREE_NUTS' => array('code' => 'N', 'label' => __('Tree nuts', 'menuosaur')),
         );
     }
 
@@ -2859,6 +2967,7 @@ class Menuosaur_Plugin {
             'heading_text' => isset($_POST['heading_text']) ? trim(sanitize_text_field(wp_unslash($_POST['heading_text']))) : '',
             'intro_text' => isset($_POST['intro_text']) ? trim(sanitize_textarea_field(wp_unslash($_POST['intro_text']))) : '',
             'total_discount_percent' => isset($_POST['total_discount_percent']) ? $this->sanitize_percentage(wp_unslash($_POST['total_discount_percent'])) : 0,
+            'total_tax_percent' => isset($_POST['total_tax_percent']) ? $this->sanitize_percentage(wp_unslash($_POST['total_tax_percent'])) : 0,
             'display' => array(
                 'show_item_name' => isset($_POST['display_show_item_name']) ? 1 : 0,
                 'show_item_image' => isset($_POST['display_show_item_image']) ? 1 : 0,
